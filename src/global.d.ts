@@ -2,10 +2,6 @@ export {};
 
 declare module "xlsx-js-style";
 declare module "jszip";
-declare module "*.png" {
-  const src: string;
-  export default src;
-}
 
 declare global {
   interface Window {
