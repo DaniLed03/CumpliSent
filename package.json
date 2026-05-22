@@ -1,0 +1,136 @@
+{
+  "name": "@figma/my-make-file",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "dev:desktop": "node electron/dev.cjs",
+    "electron:dev": "node electron/dev.cjs",
+    "electron": "npm run build && node electron/start.cjs",
+    "dist:win": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@fastify/cors": "^11.2.0",
+    "@mui/icons-material": "7.3.5",
+    "@mui/material": "7.3.5",
+    "@popperjs/core": "2.11.8",
+    "@radix-ui/react-accordion": "1.2.3",
+    "@radix-ui/react-alert-dialog": "1.1.6",
+    "@radix-ui/react-aspect-ratio": "1.1.2",
+    "@radix-ui/react-avatar": "1.1.3",
+    "@radix-ui/react-checkbox": "1.1.4",
+    "@radix-ui/react-collapsible": "1.1.3",
+    "@radix-ui/react-context-menu": "2.2.6",
+    "@radix-ui/react-dialog": "1.1.6",
+    "@radix-ui/react-dropdown-menu": "2.1.6",
+    "@radix-ui/react-hover-card": "1.1.6",
+    "@radix-ui/react-label": "2.1.2",
+    "@radix-ui/react-menubar": "1.1.6",
+    "@radix-ui/react-navigation-menu": "1.2.5",
+    "@radix-ui/react-popover": "1.1.6",
+    "@radix-ui/react-progress": "1.1.2",
+    "@radix-ui/react-radio-group": "1.2.3",
+    "@radix-ui/react-scroll-area": "1.2.3",
+    "@radix-ui/react-select": "2.1.6",
+    "@radix-ui/react-separator": "1.1.2",
+    "@radix-ui/react-slider": "1.2.3",
+    "@radix-ui/react-slot": "1.1.2",
+    "@radix-ui/react-switch": "1.1.3",
+    "@radix-ui/react-tabs": "1.1.3",
+    "@radix-ui/react-toggle": "1.1.2",
+    "@radix-ui/react-toggle-group": "1.1.2",
+    "@radix-ui/react-tooltip": "1.1.8",
+    "canvas-confetti": "1.9.4",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "date-fns": "3.6.0",
+    "embla-carousel-react": "8.6.0",
+    "fastify": "^5.8.5",
+    "input-otp": "1.4.2",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "0.487.0",
+    "motion": "12.23.24",
+    "next-themes": "0.4.6",
+    "react-day-picker": "8.10.1",
+    "react-dnd": "16.0.1",
+    "react-dnd-html5-backend": "16.0.1",
+    "react-hook-form": "7.55.0",
+    "react-popper": "2.3.0",
+    "react-resizable-panels": "2.1.7",
+    "react-responsive-masonry": "2.7.1",
+    "react-router": "7.13.0",
+    "react-slick": "0.31.0",
+    "recharts": "2.15.2",
+    "sonner": "2.0.3",
+    "sweetalert2": "^11.26.24",
+    "tailwind-merge": "3.2.0",
+    "tw-animate-css": "1.3.8",
+    "vaul": "1.1.2",
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.12",
+    "@vitejs/plugin-react": "4.7.0",
+    "electron": "^36.2.0",
+    "electron-builder": "^26.8.1",
+    "tailwindcss": "4.1.12",
+    "typescript": "^5.6.3",
+    "vite": "6.3.5"
+  },
+  "peerDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "6.3.5"
+    }
+  },
+  "author": "CumpliSent Team",
+  "description": "Sistema de Control de Cumplimiento de Sentencias",
+  "build": {
+    "appId": "mx.intranet.cumplisent",
+    "productName": "CumpliSent",
+    "artifactName": "CumpliSentInstallerV4.0.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "Images/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "Images/Cumplisent.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "CumpliSent",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

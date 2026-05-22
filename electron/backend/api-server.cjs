@@ -1,0 +1,376 @@
+const Fastify = require('fastify');
+const cors = require('@fastify/cors');
+const jwt = require('jsonwebtoken');
+const crypto = require('node:crypto');
+const {
+  authenticateUserWithRemember,
+  createRole,
+  createUser,
+  initializeAuthTables,
+  listPermissions,
+  listRoles,
+  listRolesWithPermissions,
+  listUsers,
+  normalizeRoleName,
+  updateRole,
+  updateUser,
+  verifyRememberSession,
+} = require('./auth-store.cjs');
+const {
+  addCumplimientos,
+  getCumplimientos,
+  getDiasInhabiles,
+  initializeStore,
+  patchCumplimiento,
+  recalculateCumplimientos,
+  replaceDiasInhabiles,
+  updateCumplimientosDesdeSentencias,
+} = require('./store.cjs');
+
+/* ────────────────────────────────────────────
+ * JWT Secret — generated per server session
+ * ──────────────────────────────────────────── */
+
+const JWT_SECRET = crypto.randomBytes(32).toString('hex');
+const JWT_EXPIRY = '12h';
+
+function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+/* ────────────────────────────────────────────
+ * Server instance
+ * ──────────────────────────────────────────── */
+
+let serverInstance = null;
+let serverPort = null;
+
+function getServerStatus() {
+  return {
+    running: serverInstance !== null,
+    port: serverPort,
+  };
+}
+
+/* ────────────────────────────────────────────
+ * Build Fastify app
+ * ──────────────────────────────────────────── */
+
+function buildApp() {
+  const app = Fastify({ logger: false });
+
+  app.register(cors, { origin: true });
+
+  /* ── Auth middleware decorator ── */
+  app.decorate('authenticate', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      reply.code(401).send({ error: 'Token requerido' });
+      return;
+    }
+
+    const token = authHeader.slice(7);
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      reply.code(401).send({ error: 'Token inválido o expirado' });
+      return;
+    }
+
+    request.user = decoded;
+  });
+
+  app.decorate('requireAdmin', async (request, reply) => {
+    if (!request.user || normalizeRoleName(request.user.Rol) !== 'ADMINISTRADOR') {
+      reply.code(403).send({ error: 'Se requiere rol de ADMINISTRADOR' });
+    }
+  });
+
+  /* ── Health check ── */
+  app.get('/api/health', async () => ({ ok: true, timestamp: new Date().toISOString() }));
+
+  /* ── Login ── */
+  app.post('/api/login', async (request, reply) => {
+    const { usuario, password, remember, machineId } = request.body || {};
+    if (!usuario || !password) {
+      return reply.code(400).send({ error: 'Usuario y contraseña requeridos' });
+    }
+
+    const result = authenticateUserWithRemember(usuario, password, Boolean(remember), machineId || '');
+    if (!result.ok) {
+      return reply.code(401).send({ error: result.error });
+    }
+
+    const token = signToken(result.user);
+    return {
+      ok: true,
+      token,
+      user: result.user,
+      rememberToken: result.rememberToken,
+      rememberTokenExpires: result.rememberTokenExpires,
+    };
+  });
+
+  app.post('/api/remember-login', async (request, reply) => {
+    const { token: rememberToken, machineId } = request.body || {};
+    if (!rememberToken) {
+      return reply.code(400).send({ error: 'Token requerido' });
+    }
+
+    const result = verifyRememberSession(rememberToken, machineId || '');
+    if (!result.ok) {
+      return reply.code(401).send({ error: result.error });
+    }
+
+    const token = signToken(result.user);
+    return { ok: true, token, user: result.user };
+  });
+
+  /* ── Verify token ── */
+  app.get('/api/verify', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    return { ok: true, user: request.user };
+  });
+
+  /* ── List users (admin only) ── */
+  app.get('/api/usuarios', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async () => {
+    return { ok: true, usuarios: listUsers() };
+  });
+
+  /* ── Create user (admin only) ── */
+  app.post('/api/usuarios', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async (request, reply) => {
+    const { Usuario, Password, IdRol, NombreCompleto } = request.body || {};
+    if (!Usuario || !Password) {
+      return reply.code(400).send({ error: 'Usuario y contraseña son requeridos' });
+    }
+
+    const result = createUser({ Usuario, Password, IdRol, NombreCompleto });
+    if (!result.ok) {
+      return reply.code(409).send({ error: result.error });
+    }
+
+    return { ok: true, IdUsuario: result.IdUsuario };
+  });
+
+  /* ── Update user (admin only) ── */
+  app.put('/api/usuarios/:id', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!id) {
+      return reply.code(400).send({ error: 'ID de usuario inválido' });
+    }
+
+    const result = updateUser(id, request.body || {});
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    return { ok: true };
+  });
+
+  /* ── List roles ── */
+  app.get('/api/roles', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, roles: listRoles() };
+  });
+
+  app.get('/api/permissions', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async () => {
+    return { ok: true, permissions: listPermissions() };
+  });
+
+  app.get('/api/roles-with-permissions', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async () => {
+    return { ok: true, roles: listRolesWithPermissions() };
+  });
+
+  app.post('/api/roles', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async (request, reply) => {
+    const result = createRole(request.body || {});
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.error });
+    }
+    return result;
+  });
+
+  app.put('/api/roles/:id', {
+    preHandler: [app.authenticate, app.requireAdmin],
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!id) {
+      return reply.code(400).send({ error: 'ID de rol invalido' });
+    }
+    const result = updateRole(id, request.body || {});
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.error });
+    }
+    return result;
+  });
+
+  app.get('/api/cumplimientos', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, rows: getCumplimientos() };
+  });
+
+  app.post('/api/cumplimientos', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    return { ok: true, result: addCumplimientos(Array.isArray(request.body) ? request.body : []) };
+  });
+
+  app.patch('/api/cumplimientos/:id', {
+    preHandler: [app.authenticate],
+  }, async (request, reply) => {
+    const row = patchCumplimiento(request.params.id, request.body || {});
+    if (!row) {
+      return reply.code(400).send({ error: 'No se pudo actualizar el cumplimiento' });
+    }
+    return { ok: true, row };
+  });
+
+  app.post('/api/cumplimientos/recalculate', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, rows: recalculateCumplimientos() };
+  });
+
+  app.post('/api/cumplimientos/update-from-sentencias', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    return { ok: true, result: updateCumplimientosDesdeSentencias(Array.isArray(request.body) ? request.body : []) };
+  });
+
+  app.get('/api/inhabiles', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, rows: getDiasInhabiles() };
+  });
+
+  app.put('/api/inhabiles', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    return { ok: true, rows: replaceDiasInhabiles(Array.isArray(request.body) ? request.body : []) };
+  });
+
+  return app;
+}
+
+/* ────────────────────────────────────────────
+ * Start / Stop
+ * ──────────────────────────────────────────── */
+
+async function startServer(port = 3000) {
+  if (serverInstance) {
+    throw new Error('El servidor ya está en ejecución');
+  }
+
+  initializeAuthTables();
+  initializeStore();
+
+  const app = buildApp();
+  await app.listen({ port, host: '0.0.0.0' });
+  serverInstance = app;
+  serverPort = port;
+
+  return { port };
+}
+
+async function stopServer() {
+  if (!serverInstance) {
+    return;
+  }
+
+  await serverInstance.close();
+  serverInstance = null;
+  serverPort = null;
+}
+
+/* ────────────────────────────────────────────
+ * Port scanning
+ * ──────────────────────────────────────────── */
+
+const net = require('node:net');
+
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port, '0.0.0.0');
+  });
+}
+
+async function scanPorts(startPort = 3000, count = 10) {
+  const available = [];
+  const candidatePorts = [
+    ...Array.from({ length: count }, (_, index) => startPort + index),
+    5000,
+    5050,
+    8000,
+    8080,
+    8081,
+    8888,
+  ];
+
+  const uniquePorts = [...new Set(candidatePorts)].sort((a, b) => a - b);
+  for (const p of uniquePorts) {
+    if (await isPortAvailable(p)) {
+      available.push(p);
+    }
+  }
+  return available;
+}
+
+/* ────────────────────────────────────────────
+ * Network interfaces
+ * ──────────────────────────────────────────── */
+
+const os = require('node:os');
+
+function getNetworkUrls(port) {
+  const urls = [{ type: 'local', url: `http://127.0.0.1:${port}` }];
+  const interfaces = os.networkInterfaces();
+
+  for (const [, nets] of Object.entries(interfaces)) {
+    for (const net of nets || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        urls.push({ type: 'lan', url: `http://${net.address}:${port}` });
+      }
+    }
+  }
+
+  return urls;
+}
+
+/* ────────────────────────────────────────────
+ * Exports
+ * ──────────────────────────────────────────── */
+
+module.exports = {
+  getNetworkUrls,
+  getServerStatus,
+  scanPorts,
+  startServer,
+  stopServer,
+};
