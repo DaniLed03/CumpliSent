@@ -1,4 +1,4 @@
-import logoImg from '@/assets/Cumplisent.png';
+import logoImg from '../../assets/Cumplisent.png';
 import { useState, useEffect } from 'react';
 import {
   LogIn,

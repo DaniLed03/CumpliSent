@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import logoImg from '@/assets/Cumplisent.png';
+import logoImg from '../assets/Cumplisent.png';
 import {
   Calendar,
   CheckCircle,
