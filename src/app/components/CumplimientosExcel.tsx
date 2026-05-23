@@ -123,29 +123,44 @@ const SORT_COLUMNS: Array<{ key: SortColumnKey; label: string; type: 'number' | 
 
 const DEFAULT_SORT_LEVELS: SortLevel[] = [];
 const SORT_STORAGE_KEY = 'cumplimientos.sortLevels.v1';
+const SORT_COOKIE_NAME = 'cumplimientos_sort_levels_v1';
+const SORT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+function normalizeSavedSortLevels(raw: unknown): SortLevel[] {
+  if (!Array.isArray(raw)) return DEFAULT_SORT_LEVELS;
+
+  return raw
+    .slice(0, 64)
+    .filter((level): level is SortLevel =>
+      level &&
+      SORT_COLUMNS.some((column) => column.key === level.column) &&
+      (level.direction === 'ASC' || level.direction === 'DESC')
+    )
+    .map((level, index) => ({
+      id: typeof level.id === 'string' ? level.id : `nivel-${index + 1}`,
+      column: level.column,
+      direction: level.direction,
+    }));
+}
+
+function readSortCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const cookie = document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${SORT_COOKIE_NAME}=`));
+
+  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : null;
+}
 
 function loadSavedSortLevels(): SortLevel[] {
   if (typeof window === 'undefined') return DEFAULT_SORT_LEVELS;
 
   try {
-    const raw = window.localStorage.getItem(SORT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(SORT_STORAGE_KEY) || readSortCookie();
     if (!raw) return DEFAULT_SORT_LEVELS;
 
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_SORT_LEVELS;
-
-    return parsed
-      .slice(0, 64)
-      .filter((level): level is SortLevel =>
-        level &&
-        SORT_COLUMNS.some((column) => column.key === level.column) &&
-        (level.direction === 'ASC' || level.direction === 'DESC')
-      )
-      .map((level, index) => ({
-        id: typeof level.id === 'string' ? level.id : `nivel-${index + 1}`,
-        column: level.column,
-        direction: level.direction,
-      }));
+    return normalizeSavedSortLevels(JSON.parse(raw));
   } catch {
     return DEFAULT_SORT_LEVELS;
   }
@@ -155,17 +170,19 @@ function saveSortLevels(levels: SortLevel[]) {
   if (typeof window === 'undefined') return;
 
   try {
-    if (levels.length === 0) {
+    const normalizedLevels = normalizeSavedSortLevels(levels);
+
+    if (normalizedLevels.length === 0) {
       window.localStorage.removeItem(SORT_STORAGE_KEY);
+      document.cookie = `${SORT_COOKIE_NAME}=; path=/; max-age=0`;
       return;
     }
 
-    window.localStorage.setItem(
-      SORT_STORAGE_KEY,
-      JSON.stringify(levels.map(({ id, column, direction }) => ({ id, column, direction })))
-    );
+    const raw = JSON.stringify(normalizedLevels.map(({ id, column, direction }) => ({ id, column, direction })));
+    window.localStorage.setItem(SORT_STORAGE_KEY, raw);
+    document.cookie = `${SORT_COOKIE_NAME}=${encodeURIComponent(raw)}; path=/; max-age=${SORT_COOKIE_MAX_AGE}; SameSite=Lax`;
   } catch {
-    // El ordenamiento sigue funcionando aunque el navegador bloquee localStorage.
+    // El ordenamiento sigue funcionando aunque el navegador bloquee almacenamiento local.
   }
 }
 
@@ -965,8 +982,9 @@ export default function CumplimientosExcel({
   };
 
   const applySortLevels = () => {
-    setSortLevels(draftSortLevels);
-    saveSortLevels(draftSortLevels);
+    const nextLevels = normalizeSavedSortLevels(draftSortLevels);
+    setSortLevels(nextLevels);
+    saveSortLevels(nextLevels);
     setShowModalOrdenar(false);
     setVisibleRows({ start: 0, end: 80 });
     tableViewportRef.current?.scrollTo({ top: 0 });
@@ -3908,4 +3926,3 @@ function DetailField({
     </div>
   );
 }
-
