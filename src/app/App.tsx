@@ -1117,6 +1117,7 @@ export default function App() {
               <h1 className="text-xl font-black tracking-tight truncate">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
+                <span className="ml-1 text-black">v5.0</span>
               </h1>
             </div>
           )}

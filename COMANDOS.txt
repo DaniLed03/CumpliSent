@@ -3,6 +3,7 @@ GENERAR LICENCIAS
 node scripts/license-keygen.js EAA56815-0A57-4FE4-8ECD-3A8261030293 --expiry 2027-12-31
 node scripts/license-keygen.js A3567567-BE23-44F1-8F1A-3C1FFD6780D2 --minutes 8
 node scripts/license-keygen.js MACHINE_ID --hours 2
+node scripts/license-keygen.js A3567567-BE23-44F1-8F1A-3C1FFD6780D2 --days 1
 
 
 VER LICENCIA
