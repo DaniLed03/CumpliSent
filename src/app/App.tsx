@@ -826,7 +826,7 @@ function DiasInhabilesView({
   return (
     <div className="h-full min-h-0 flex flex-col gap-4">
       {canManage && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 flex-shrink-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-shrink-0">
           <div className="bg-card rounded-lg border border-border p-4 min-w-0">
             <h3 className="font-semibold mb-3">
               Agregar Día Inhábil Manualmente
@@ -853,18 +853,16 @@ function DiasInhabilesView({
           </div>
 
           <div className="bg-card rounded-lg border border-border p-4 min-w-0 relative">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <h3 className="font-semibold">Importar desde Excel</h3>
-              <button
-                type="button"
-                onClick={() => setShowImportHelp(true)}
-                className="h-7 w-7 flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
-                title="Ver instrucción"
-                aria-label="Ver instrucción para importar desde Excel"
-              >
-                <CircleHelp className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowImportHelp(true)}
+              className="absolute right-4 top-4 h-7 w-7 flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+              title="Ver instrucción"
+              aria-label="Ver instrucción para importar desde Excel"
+            >
+              <CircleHelp className="w-4 h-4" />
+            </button>
+            <h3 className="font-semibold mb-3 pr-10">Importar desde Excel</h3>
             <div className="space-y-3">
               <div className="flex items-center gap-4">
                 <label className="cursor-pointer flex-1 min-w-0">
@@ -938,7 +936,10 @@ function DiasInhabilesView({
         </div>
       )}
 
-      <div className="bg-card rounded-lg border border-border p-4 flex-1 min-h-0 flex flex-col">
+      <div
+        className="bg-card rounded-lg border border-border p-4 md:col-span-2 flex-1 min-h-0 flex flex-col"
+        style={{ gridColumn: "1 / -1", width: "100%" }}
+      >
         <h3 className="font-semibold mb-3 flex-shrink-0">
           Días Inhábiles Registrados ({diasInhabiles.length})
         </h3>
