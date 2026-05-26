@@ -31,6 +31,7 @@ async function remoteRequest(path, options = {}) {
 const localCumplimientosBackend = {
   databasePath: () => ipcRenderer.invoke('database:path'),
   add: (rows) => ipcRenderer.invoke('cumplimientos:add', rows),
+  importRows: (rows) => ipcRenderer.invoke('cumplimientos:import-rows', rows),
   list: () => ipcRenderer.invoke('cumplimientos:list'),
   patch: (id, patch) => ipcRenderer.invoke('cumplimientos:patch', id, patch),
   recalculate: () => ipcRenderer.invoke('cumplimientos:recalculate'),
@@ -42,6 +43,10 @@ const localCumplimientosBackend = {
 const remoteCumplimientosBackend = {
   databasePath: async () => `${remoteSession?.apiUrl || ''}/api`,
   add: async (rows) => (await remoteRequest('/api/cumplimientos', {
+    method: 'POST',
+    body: JSON.stringify(rows),
+  })).result,
+  importRows: async (rows) => (await remoteRequest('/api/cumplimientos/import-rows', {
     method: 'POST',
     body: JSON.stringify(rows),
   })).result,
@@ -84,6 +89,7 @@ function clearRememberPayload() {
 contextBridge.exposeInMainWorld('cumplimientosBackend', {
   databasePath: (...args) => getCumplimientosBackend().databasePath(...args),
   add: (...args) => getCumplimientosBackend().add(...args),
+  importRows: (...args) => getCumplimientosBackend().importRows(...args),
   list: (...args) => getCumplimientosBackend().list(...args),
   patch: (...args) => getCumplimientosBackend().patch(...args),
   recalculate: (...args) => getCumplimientosBackend().recalculate(...args),
@@ -187,7 +193,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   checkLicense: () => ipcRenderer.invoke('license:check'),
   activateLicense: (serial) => ipcRenderer.invoke('license:activate', serial),
-  generateLicense: (days) => ipcRenderer.invoke('license:generate', days),
+  generateLicense: (input) => ipcRenderer.invoke('license:generate', input),
   getMachineId: () => ipcRenderer.invoke('license:machine-id'),
 
   // Server control

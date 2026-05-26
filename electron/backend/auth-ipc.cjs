@@ -17,7 +17,7 @@ const {
 const {
   activateLicense,
   checkLicense,
-  generateSerial,
+  generateLicense,
   getMachineId,
   initializeLicenseTable,
 } = require('./license-store.cjs');
@@ -138,8 +138,8 @@ function registerAuthHandlers() {
     return activateLicense(serial);
   });
 
-  ipcMain.handle('license:generate', async (_event, days) => {
-    return generateSerial(days);
+  ipcMain.handle('license:generate', async (_event, input) => {
+    return generateLicense(input);
   });
 
   ipcMain.handle('license:machine-id', async () => {

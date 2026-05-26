@@ -1,18 +1,18 @@
-import logoImg from '../../assets/Cumplisent.png';
 import { useState, useEffect } from 'react';
 import {
   LogIn,
   Eye,
   EyeOff,
-  Shield,
   Loader2,
   AlertCircle,
   Key,
   Copy,
   Check,
 } from 'lucide-react';
-import { closeStyledAlert, showStyledAlert } from '../utils/alert';
-import { toastSuccess } from '../utils/toast';
+import { closeStyledAlert } from '../utils/alert';
+import { toastError, toastSuccess } from '../utils/toast';
+
+const logoImg = `${import.meta.env.BASE_URL}icons/cumplisent-fast.png`;
 
 interface LoginScreenProps {
   onLogin: (user: SessionUser, token?: string, apiUrl?: string) => void;
@@ -33,6 +33,20 @@ function FloatingAuthIcons() {
   );
 }
 
+function formatLicenseExpiry(expiry?: string) {
+  if (!expiry) return '';
+  const match = String(expiry).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return '';
+
+  const [, year, month, day, hour, minute] = match;
+  if (hour === '00' && minute === '00') {
+    const date = new Date(Number(year), Number(month) - 1, Number(day) - 1);
+    return `${date.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })} 23:59 PM`;
+  }
+  const dateLabel = `${day}/${month}/${year}`;
+  return hour ? `${dateLabel} ${hour}:${minute} PM` : `${dateLabel} 23:59 PM`;
+}
+
 export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false }: LoginScreenProps) {
   const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('adminServerUrl') || '');
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('rememberMe') === 'S');
@@ -40,7 +54,6 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   // ── License state ──
   const [licenseStatus, setLicenseStatus] = useState<{
@@ -61,6 +74,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
   const [serialError, setSerialError] = useState('');
   const [checkingLicense, setCheckingLicense] = useState(!skipInitialLicenseLoader);
   const [copiedMachineId, setCopiedMachineId] = useState(false);
+  const licenseExpiryLabel = formatLicenseExpiry(licenseStatus?.expiry);
 
   // Check license on mount
   useEffect(() => {
@@ -118,29 +132,26 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
       setCopiedMachineId(true);
       window.setTimeout(() => setCopiedMachineId(false), 1600);
     } catch {
-      setSerialError('No se pudo copiar el Machine ID');
-      showStyledAlert({
-        title: 'No se pudo copiar',
-        text: 'Copia manualmente el Machine ID.',
-        icon: 'error',
-      });
+      toastError('No se pudo copiar', 'Copia manualmente el Machine ID.');
     }
   }
 
   async function handleActivateSerial(e: React.FormEvent) {
     e.preventDefault();
     setSerialError('');
+
+    if (!serialInput.trim()) {
+      toastError('Serial requerido', 'Ingresa el serial de licencia.');
+      return;
+    }
+
     setSerialLoading(true);
     try {
       const result = await window.api.activateLicense(serialInput.trim());
       if (!result.ok) {
         const message = result.error || 'Serial invalido';
         setSerialError(message);
-        showStyledAlert({
-          title: 'Error al activar la licencia',
-          text: message,
-          icon: 'error',
-        });
+        toastError('Error al activar la licencia', message);
       } else {
         setSerialInput('');
         toastSuccess('Licencia activada', result.message || 'La licencia se activo correctamente.');
@@ -148,11 +159,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
       }
     } catch {
       setSerialError('Error al activar la licencia');
-      showStyledAlert({
-        title: 'Error al activar la licencia',
-        text: 'No se pudo activar la licencia.',
-        icon: 'error',
-      });
+      toastError('Error al activar la licencia', 'No se pudo activar la licencia.');
     } finally {
       setSerialLoading(false);
     }
@@ -161,7 +168,17 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     closeStyledAlert();
-    setError('');
+
+    if (!usuario.trim()) {
+      toastError('Usuario requerido', 'Ingresa tu usuario.');
+      return;
+    }
+
+    if (!password.trim()) {
+      toastError('Contrasena requerida', 'Ingresa tu contrasena.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -171,12 +188,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
         : await window.api.bootstrapLogin(usuario, password, rememberMe);
       if (!result.ok) {
         const message = result.error || 'Credenciales incorrectas';
-        setError(message);
-        showStyledAlert({
-          title: 'Error al iniciar sesión',
-          text: message,
-          icon: 'error',
-        });
+        toastError('Error al iniciar sesion', message);
         setLoading(false);
         return;
       }
@@ -187,12 +199,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
       closeStyledAlert();
       onLogin(result.user!, result.token, cleanServerUrl);
     } catch {
-      setError('Error al iniciar sesión');
-      showStyledAlert({
-        title: 'Error al iniciar sesión',
-        text: 'No se pudo iniciar sesión.',
-        icon: 'error',
-      });
+      toastError('Error al iniciar sesion', 'No se pudo iniciar sesion.');
     } finally {
       setLoading(false);
     }
@@ -241,7 +248,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
             </div>
           )}
 
-          <form onSubmit={handleActivateSerial} className="login-form">
+          <form onSubmit={handleActivateSerial} className="login-form" noValidate>
             <div className="login-field">
               <label htmlFor="machine-id-input">Machine ID</label>
               <div className="login-password-wrap">
@@ -272,18 +279,10 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
                 value={serialInput}
                 onChange={(e) => setSerialInput(e.target.value.toUpperCase())}
                 placeholder="SERIAL V3"
-                required
                 autoFocus
                 style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
               />
             </div>
-
-            {serialError && (
-              <div className="login-error">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="text-xs">{serialError}</span>
-              </div>
-            )}
 
             <button type="submit" className="login-submit" disabled={serialLoading}>
               {serialLoading ? (
@@ -331,15 +330,17 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
           <div className={`login-server-badge ${licenseStatus.minutesLeft != null && licenseStatus.minutesLeft <= 10080 ? 'offline' : 'online'}`}>
             <Key className="w-3.5 h-3.5" />
             <span>
-              {licenseStatus.minutesLeft != null && licenseStatus.minutesLeft <= 10080
-                ? `Licencia expira en ${licenseStatus.timeLeftLabel || `${licenseStatus.daysLeft} dia(s)`}`
-                : `Licencia activa - ${licenseStatus.timeLeftLabel || `${licenseStatus.daysLeft} dias restantes`}`}
+              {licenseExpiryLabel
+                ? `Licencia valida hasta ${licenseExpiryLabel}`
+                : licenseStatus.minutesLeft != null && licenseStatus.minutesLeft <= 10080
+                  ? `Licencia expira en ${licenseStatus.timeLeftLabel || `${licenseStatus.daysLeft} dia(s)`}`
+                  : `Licencia activa - ${licenseStatus.timeLeftLabel || `${licenseStatus.daysLeft} dias restantes`}`}
             </span>
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleLogin} className="login-form">
+        <form onSubmit={handleLogin} className="login-form" noValidate>
           <div className="login-field">
             <label htmlFor="server-url">URL del servidor admin</label>
             <input
@@ -361,7 +362,6 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               placeholder="Ingrese su usuario"
-              required
               autoFocus
               autoComplete="username"
             />
@@ -377,7 +377,6 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Ingrese su contraseña"
-                required
                 autoComplete="current-password"
               />
               <button
@@ -403,16 +402,6 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
               <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${rememberMe ? 'translate-x-5' : 'translate-x-1'}`} />
             </span>
           </label>
-
-          {/* Error */}
-          {error && (
-            <div className="login-error" style={{ alignItems: 'flex-start' }}>
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-xs" style={{ lineHeight: 1.35, wordBreak: 'break-word' }}>
-                {error}
-              </span>
-            </div>
-          )}
 
           {/* Submit */}
           <button type="submit" className="login-submit" disabled={loading}>

@@ -365,8 +365,8 @@ function parseSortDate(value: unknown) {
   }
 
   if (value instanceof Date) {
-    const time = value.getTime();
-    return Number.isNaN(time) ? null : time;
+    if (Number.isNaN(value.getTime())) return null;
+    return Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
   }
 
   const text = String(value).trim();
@@ -385,8 +385,12 @@ function parseSortDate(value: unknown) {
     return Date.UTC(year, Number(mx[2]) - 1, Number(mx[1]));
   }
 
-  const parsed = new Date(text).getTime();
-  return Number.isNaN(parsed) ? null : parsed;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
 function parseDateFilterOption(option: string) {
@@ -1144,11 +1148,6 @@ export default function CumplimientosExcel({
       const sheet = wb.Sheets[sheetName];
 
       // ── Cargar expedientes frescos desde la BD (evita stale closure) ──────
-      let dbExpedientes: Expediente[] = [];
-      try {
-        dbExpedientes = await window.cumplimientosBackend.list();
-      } catch (_) { /* usa estado local como fallback */ dbExpedientes = expedientes; }
-
       const matrix: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
         header: 1,
         raw: true,
@@ -1245,6 +1244,11 @@ export default function CumplimientosExcel({
       // Elimina espacios alrededor de /, puntos, guión, caracteres invisibles
       const normalizeJuicio = (v: string): string =>
         v.replace(/\s*\/\s*/g, '/').replace(/[\u00A0\u200B\t]/g, '').replace(/\s+/g, ' ').toUpperCase().trim();
+
+      let dbExpedientes: Expediente[] = [];
+      try {
+        dbExpedientes = await window.cumplimientosBackend.list();
+      } catch (_) { /* usa estado local como fallback */ dbExpedientes = expedientes; }
 
       // Mapa existente por numeroJuicio (clave exacta + normalizada)
       const expedientesPorJuicio = new Map<string, Expediente>();
@@ -2538,7 +2542,7 @@ export default function CumplimientosExcel({
           </button>
         )}
         <button
-          onClick={() => setShowReglas(!showReglas)}
+          onClick={() => setShowReglas(true)}
           className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 border border-blue-700 text-white rounded text-[11px] md:text-xs font-semibold shadow-sm hover:bg-blue-700 transition-colors sm:ml-auto"
         >
           <Info className="w-3 h-3" />
@@ -2548,29 +2552,47 @@ export default function CumplimientosExcel({
 
       {/* REGLAS DE CALCULO */}
       {showReglas && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 flex-shrink-0">
-          <div className="flex items-start gap-2 mb-3">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowReglas(false)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[76vh] overflow-y-auto bg-blue-50 border border-blue-200 rounded-lg p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-start gap-2 min-w-0">
             <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <h3 className="text-xs md:text-sm font-semibold text-blue-900">Reglas de Cálculo del Sistema</h3>
           </div>
-          <div className="space-y-2 md:space-y-3 text-[11px] md:text-xs text-blue-900">
-            <div className="bg-white/50 rounded p-2 md:p-3">
+            <button
+              type="button"
+              onClick={() => setShowReglas(false)}
+              className="p-1.5 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
+              title="Cerrar"
+            >
+              <X className="w-4 h-4 text-blue-800" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] md:text-[11px] text-blue-900">
+            <div className="bg-white/60 rounded p-2">
               <p className="font-semibold mb-1">ULT. EJECUTORIA:</p>
               <p>Fecha mas reciente entre FECHA EJECUTORIA COLEGIADO, FECHA EJECUTORIA INCONFORMIDAD, FECHA DE EJECUTORIA y FECHA POR NO CUMPLIDA.</p>
             </div>
-            <div className="bg-white/50 rounded p-2 md:p-3">
+            <div className="bg-white/60 rounded p-2">
               <p className="font-semibold mb-1">DÍAS NATURALES TRANSCURRIDOS:</p>
               <p>Días desde ÚLTIMO REQUERIMIENTO hasta hoy.</p>
             </div>
-            <div className="bg-white/50 rounded p-2 md:p-3">
+            <div className="bg-white/60 rounded p-2">
               <p className="font-semibold mb-1">DÍAS HÁBILES TRANSCURRIDOS:</p>
               <p>Si existe ULTIMO REQUERIMIENTO, calcula DIAS.LAB.INTL desde ULTIMO REQUERIMIENTO hasta hoy, descontando sabados, domingos y días inhábiles, y resta 1 como en Excel.</p>
             </div>
-            <div className="bg-white/50 rounded p-2 md:p-3">
+            <div className="bg-white/60 rounded p-2">
               <p className="font-semibold mb-1">ESTATUS:</p>
               <p>Queda vacío si falta ULTIMO REQUERIMIENTO o si existe SE DECLARO SIN MATERIA, FECHA DE VISTA, REVISION CONTRA SENTENCIA, FECHA DE CUMPLIMIENTO o CUMPLIMIENTO &lt; FECHA EJECUTORIA. Si no, muestra DIAS.LAB.INTL sin restar 1: 0-3 verde, 4-6 amarillo, 7-9 rojo claro, 10+ rojo.</p>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -2889,7 +2911,7 @@ export default function CumplimientosExcel({
           onScroll={updateVisibleRows}
           className="h-full min-h-0 overflow-auto"
         >
-          <table className="w-full text-[10px] border-collapse">
+          <table className="cumplimientos-sticky-table w-full text-[10px] border-collapse">
             <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
               <tr>
                 {TABLE_HEADERS.map(renderTableHeader)}

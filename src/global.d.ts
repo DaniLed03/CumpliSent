@@ -8,6 +8,9 @@ declare global {
     cumplimientosBackend: {
       databasePath: () => Promise<string>;
       add: (rows: any[]) => Promise<{ inserted: number; rows: any[] }>;
+      importRows?: (
+        rows: any[],
+      ) => Promise<{ rows: any[]; summary: any }>;
       list: () => Promise<any[]>;
       patch: (id: string, patch: Record<string, any>) => Promise<any>;
       recalculate: () => Promise<any[]>;
@@ -82,11 +85,12 @@ declare global {
         expiry?: string;
         state?: LicenseStatus;
       }>;
-      generateLicense: (days: number) => Promise<{
+      generateLicense: (input: number | string | { expiry: string; machineId?: string }) => Promise<{
         ok: boolean;
         error?: string;
         serial?: string;
         days?: number;
+        expiry?: string;
         machineId?: string;
       }>;
       getMachineId: () => Promise<string>;

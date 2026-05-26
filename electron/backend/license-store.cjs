@@ -1,6 +1,35 @@
 const license = require('../license.cjs');
 
 const V3_KIND_DAYS = 2;
+const V3_KIND_ABS_MINUTES = 1;
+
+function parseExpiryInput(expiry) {
+  if (!expiry) return null;
+  const value = String(expiry).trim();
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return null;
+
+  const [, y, m, d, hh, mm, ss] = match;
+  const hasTime = Boolean(hh);
+  const date = new Date(
+    Number(y),
+    Number(m) - 1,
+    Number(d),
+    hasTime ? Number(hh) : 23,
+    hasTime ? Number(mm) : 59,
+    hasTime ? (ss ? Number(ss) : 0) : 0,
+    0
+  );
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return {
+    date,
+    expiry: hasTime
+      ? `${y}-${m}-${d}T${hh}:${mm}:${ss || '00'}`
+      : `${y}-${m}-${d}`,
+  };
+}
 
 function parseStoredExpiry(expiry) {
   if (!expiry) return null;
@@ -126,10 +155,43 @@ function generateSerial(days, machineId = license.getMachineFingerprint()) {
   }
 }
 
+function generateSerialByExpiry(expiry, machineId = license.getMachineFingerprint()) {
+  const parsed = parseExpiryInput(expiry);
+  if (!parsed) {
+    return { ok: false, error: 'La fecha debe tener formato YYYY-MM-DD o YYYY-MM-DDTHH:mm[:ss]' };
+  }
+  if (parsed.date.getTime() <= Date.now()) {
+    return { ok: false, error: 'La fecha de vencimiento debe ser futura' };
+  }
+
+  try {
+    return {
+      ok: true,
+      serial: license.makeSerialV3(machineId, V3_KIND_ABS_MINUTES, Math.floor(parsed.date.getTime() / 60000)),
+      expiry: parsed.expiry,
+      machineId,
+    };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'No se pudo generar el serial' };
+  }
+}
+
+function generateLicense(input, machineId = license.getMachineFingerprint()) {
+  if (typeof input === 'object' && input !== null && input.expiry) {
+    return generateSerialByExpiry(input.expiry, input.machineId || machineId);
+  }
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}/.test(input.trim())) {
+    return generateSerialByExpiry(input, machineId);
+  }
+  return generateSerial(input, machineId);
+}
+
 module.exports = {
   activateLicense,
   checkLicense,
+  generateLicense,
   generateSerial,
+  generateSerialByExpiry,
   getMachineId: license.getMachineFingerprint,
   initializeLicenseTable,
 };

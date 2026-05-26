@@ -5,12 +5,12 @@
  *
  * Genera seriales para CumpliSent.
  * Soporta:
+ *  - --expiry YYYY-MM-DD       (recomendado para venta normal)
+ *  - --expiry YYYY-MM-DDTHH:mm[:ss]
+ *  - --expiry "YYYY-MM-DD HH:mm"
  *  - --minutes N            (vigencia en minutos, desde activación)
  *  - --hours N              (vigencia en horas, desde activación)
  *  - --days N               (vigencia en días, desde activación)
- *  - --expiry YYYY-MM-DD
- *  - --expiry YYYY-MM-DDTHH:mm[:ss]
- *  - --expiry "YYYY-MM-DD HH:mm"
  *  - --v2                   (formato v2 legacy con salt y días)
  *  - --legacy               (formato v1 legacy sin salt, determinista por machineId|days)
  *  - --salt ABCD            (opcional, solo v2, 4 chars Base32 A–Z/2–7)
@@ -55,21 +55,21 @@ const dateTimeIso = (inputDate) => {
 
 // --- CLI ---
 const usage = `Uso:
-  node scripts/license-keygen.js MACHINE_ID --minutes 90
-  node scripts/license-keygen.js MACHINE_ID --hours 6
-  node scripts/license-keygen.js MACHINE_ID --days 30
   node scripts/license-keygen.js MACHINE_ID --expiry 2026-02-06
   node scripts/license-keygen.js MACHINE_ID --expiry 2026-02-06T15:30
   node scripts/license-keygen.js MACHINE_ID --expiry "2026-02-06 15:30"
+  node scripts/license-keygen.js MACHINE_ID --minutes 90
+  node scripts/license-keygen.js MACHINE_ID --hours 6
+  node scripts/license-keygen.js MACHINE_ID --days 30
   node scripts/license-keygen.js MACHINE_ID --v2 --days 30 [--salt ABCD]
   node scripts/license-keygen.js MACHINE_ID --legacy --days 30
 
 Argumentos:
   MACHINE_ID      ID de equipo entregado por el cliente (tal cual lo muestra la app).
+  --expiry        Fecha y hora exacta de vencimiento (RECOMENDADO).
   --minutes       Vigencia en minutos (1..1073741823).
   --hours         Vigencia en horas.
   --days          Vigencia en días.
-  --expiry        Fecha y hora exacta de vencimiento (hora local).
   --v2            Formato antiguo v2 (con salt, días visibles).
   --legacy        Formato antiguo v1 (sin salt, días visibles).
   --salt          (Opcional) 4 caracteres Base32 (A–Z, 2–7). Solo v2.
@@ -163,8 +163,8 @@ const parseExpiryInput = (value) => {
     parseInt(d, 10),
     hasTime ? parseInt(hh, 10) : 23,
     hasTime ? parseInt(mm, 10) : 59,
-    hasTime ? (ss ? parseInt(ss, 10) : 0) : 59,
-    hasTime ? 0 : 999
+    hasTime ? (ss ? parseInt(ss, 10) : 0) : 0,
+    0
   );
   if (Number.isNaN(date.getTime())) return null;
   return { date, hasTime };
@@ -252,7 +252,7 @@ try {
     serial = makeSerial(machineId, days, salt);
   } else {
     if (expiryDate) {
-      const expiryMinutes = Math.ceil(expiryDate.getTime() / 60000);
+      const expiryMinutes = Math.floor(expiryDate.getTime() / 60000);
       serial = makeSerialV3(machineId, V3_KIND_ABS_MINUTES, expiryMinutes);
     } else {
       serial = makeSerialV3(machineId, durationKind, durationValue);

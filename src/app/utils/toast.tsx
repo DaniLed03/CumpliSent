@@ -34,6 +34,13 @@ const ensureToastStyles = () => {
     .app-toast-popup .swal2-icon {
       display: none !important;
     }
+    .app-toast-container.swal2-container {
+      z-index: 2147483647 !important;
+      pointer-events: none !important;
+    }
+    .app-toast-container .app-toast-popup {
+      pointer-events: auto !important;
+    }
   `;
 
   document.head.appendChild(style);
@@ -48,6 +55,7 @@ const toast = Swal.mixin({
   width: 'auto',
   padding: 0,
   customClass: {
+    container: 'app-toast-container',
     popup: 'app-toast-popup',
   },
 });
@@ -112,6 +120,9 @@ export const showToast = (type: ToastType, title: string, text?: string) => {
     background: 'transparent',
     didOpen: (el) => {
       el.style.margin = '0 10px 10px 0';
+      if (el.parentElement) {
+        el.parentElement.style.zIndex = '2147483647';
+      }
       const closeBtn = el.querySelector('[data-close="true"]') as HTMLButtonElement | null;
       closeBtn?.addEventListener('click', () => {
         Swal.close();

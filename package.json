@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.0.1",
+  "version": "5.1.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -107,7 +107,7 @@
   "build": {
     "appId": "mx.intranet.cumplisent",
     "productName": "CumpliSent",
-    "artifactName": "CumpliSentInstallerV4.0.${ext}",
+    "artifactName": "CumpliSentInstallerV5.1.${ext}",
     "directories": {
       "output": "release"
     },

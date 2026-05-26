@@ -20,6 +20,7 @@ const {
   addCumplimientos,
   getCumplimientos,
   getDiasInhabiles,
+  importCumplimientosRows,
   initializeStore,
   patchCumplimiento,
   recalculateCumplimientos,
@@ -234,6 +235,12 @@ function buildApp() {
     preHandler: [app.authenticate],
   }, async (request) => {
     return { ok: true, result: addCumplimientos(Array.isArray(request.body) ? request.body : []) };
+  });
+
+  app.post('/api/cumplimientos/import-rows', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    return { ok: true, result: importCumplimientosRows(Array.isArray(request.body) ? request.body : []) };
   });
 
   app.patch('/api/cumplimientos/:id', {

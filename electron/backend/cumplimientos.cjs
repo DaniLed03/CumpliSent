@@ -185,10 +185,9 @@ function calcularCumplimiento(row, diasInhabiles = []) {
         ? row.fechaVista
         : 'Alerta: vista anterior a ?ltima ejecutoria';
 
-  // Mismo criterio de la columna ESTATUS en Excel:
-  // IF(OR(J="",O<>"",P<>"",Q<>"",N<>"",R/S<>""),"",NETWORKDAYS.INTL(...))
-  // Las fechas se revisan en crudo; aunque sean anteriores a la ejecutoria,
-  // su sola existencia deja el estatus vacío y las columnas de validación muestran la alerta.
+  // Campos que paran el semaforo:
+  // SE DECLARO SIN MATERIA, FECHA DE VISTA, REVISION CONTRA SENTENCIA
+  // FECHA DE CUMPLIMIENTO y CUMPLIMIENTO < FECHA EJECUTORIA.
   const estatusEnBlanco =
     !row.ultimoRequerimiento ||
     isFilled(row.seDeclaroSinMateria) ||

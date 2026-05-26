@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Server,
+  Database,
   Power,
   PowerOff,
   Copy,
@@ -29,6 +30,7 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
   const [error, setError] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [openPortDropdown, setOpenPortDropdown] = useState(false);
+  const [databasePath, setDatabasePath] = useState('');
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -55,10 +57,20 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
     }
   }, [status.running]);
 
+  const refreshDatabasePath = useCallback(async () => {
+    try {
+      const path = await window.cumplimientosBackend.databasePath();
+      setDatabasePath(path || '');
+    } catch {
+      setDatabasePath('');
+    }
+  }, []);
+
   useEffect(() => {
     refreshStatus();
     scanPorts();
-  }, [refreshStatus, scanPorts]);
+    refreshDatabasePath();
+  }, [refreshStatus, scanPorts, refreshDatabasePath]);
 
   useEffect(() => {
     if (!openPortDropdown) return undefined;
@@ -305,6 +317,56 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
             </div>
           </div>
         )}
+      </div>
+
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="server-status-dot offline">
+              <Database className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">Base de datos local</h3>
+              <p className="text-[10px] text-muted-foreground">
+                Ruta detectada por el modulo de servidor
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={refreshDatabasePath}
+            className="p-2 bg-accent rounded-lg hover:bg-accent/80 transition-colors flex-shrink-0"
+            title="Actualizar ruta de la base de datos"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          <div className="flex items-center justify-between gap-2 bg-muted/40 rounded-lg px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase font-medium">
+                Leyendo desde
+              </p>
+              <p className="text-xs font-mono font-semibold truncate">
+                {databasePath || 'No se pudo detectar la ruta'}
+              </p>
+            </div>
+            {databasePath && (
+              <button
+                onClick={() => copyUrl(databasePath)}
+                className="p-1.5 hover:bg-accent rounded-md transition-colors flex-shrink-0"
+                title="Copiar ruta"
+              >
+                {copiedUrl === databasePath ? (
+                  <Check className="w-3.5 h-3.5 text-green-500" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Error */}

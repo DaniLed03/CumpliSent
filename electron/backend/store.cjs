@@ -366,6 +366,118 @@ function updateCumplimientosDesdeSentencias(sentencias = []) {
   };
 }
 
+function normalizeJuicioKey(value) {
+  return String(value || '')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/[\u00A0\u200B\t]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+    .trim();
+}
+
+function importCumplimientosRows(importRows = []) {
+  const database = getDb();
+  const currentRows = getCumplimientos();
+  const inhabiles = getDiasInhabiles().map((dia) => dia.fecha);
+  const rowsByJuicio = new Map();
+
+  currentRows.forEach((row) => {
+    const raw = String(row.numeroJuicio || '').trim().toUpperCase();
+    const normalized = normalizeJuicioKey(raw);
+    if (raw) rowsByJuicio.set(raw, row);
+    if (normalized) rowsByJuicio.set(normalized, row);
+  });
+
+  const nextRows = currentRows.map((row) => ({ ...row }));
+  const rowsById = new Map(nextRows.map((row) => [row.id, row]));
+  let nextNumeroOrden = nextRows.reduce(
+    (max, row) => Math.max(max, Number(row.numeroOrden) || 0),
+    0
+  ) + 1;
+  let actualizados = 0;
+  let celdasActualizadas = 0;
+  let sinCambios = 0;
+  let insertados = 0;
+  let noEncontrados = 0;
+  const errores = [];
+
+  importRows.forEach((item) => {
+    const rawJuicio = String(item?.numeroJuicio || '').trim();
+    if (!rawJuicio) return;
+
+    const values = item?.values && typeof item.values === 'object' ? item.values : item;
+    const existing = rowsByJuicio.get(rawJuicio.toUpperCase()) || rowsByJuicio.get(normalizeJuicioKey(rawJuicio));
+
+    if (!existing) {
+      const inserted = normalizarCumplimiento({
+        ...values,
+        numeroOrden: nextNumeroOrden,
+        numeroJuicio: rawJuicio,
+        localizado: values.localizado ?? true,
+      }, nextNumeroOrden - 1);
+
+      nextRows.push(inserted);
+      const raw = rawJuicio.toUpperCase();
+      const normalized = normalizeJuicioKey(rawJuicio);
+      if (raw) rowsByJuicio.set(raw, inserted);
+      if (normalized) rowsByJuicio.set(normalized, inserted);
+      nextNumeroOrden += 1;
+      insertados += 1;
+      return;
+    }
+
+    const target = rowsById.get(existing.id);
+    if (!target) {
+      errores.push(`${rawJuicio}: no se pudo preparar la fila para actualizar`);
+      return;
+    }
+
+    let cambios = 0;
+    Object.entries(values).forEach(([field, newValue]) => {
+      if (field === 'id') return;
+      const oldStr = String(target[field] ?? '').trim();
+      const newStr = String(newValue ?? '').trim();
+      if (oldStr !== newStr) {
+        target[field] = newValue;
+        cambios += 1;
+      }
+    });
+
+    if (cambios === 0) {
+      sinCambios += 1;
+      return;
+    }
+
+    actualizados += 1;
+    celdasActualizadas += cambios;
+  });
+
+  const calculatedRows = nextRows.map((row, index) => calcularCumplimiento(
+    normalizarCumplimiento(row, index),
+    inhabiles
+  ));
+  const insertCumplimiento = buildInsertCumplimientoStatement(database);
+
+  runTransaction(database, (items) => {
+    database.exec(`DELETE FROM ${quoteIdentifier('CUMPLIMIENTOS')}`);
+    items.forEach((item) => insertCumplimiento.run(...toDatabaseRow(item)));
+  }, calculatedRows);
+
+  const rows = getCumplimientos();
+
+  return {
+    rows,
+    summary: {
+      actualizados,
+      celdasActualizadas,
+      sinCambios,
+      insertados,
+      noEncontrados,
+      errores,
+    },
+  };
+}
+
 function addCumplimientos(rows = []) {
   const database = getDb();
   const currentRows = getCumplimientos();
@@ -484,9 +596,9 @@ module.exports = {
   getCumplimientoColumnNames,
   getDiasInhabiles,
   initializeStore,
+  importCumplimientosRows,
   patchCumplimiento,
   recalculateCumplimientos,
   replaceDiasInhabiles,
   updateCumplimientosDesdeSentencias,
 };
-
