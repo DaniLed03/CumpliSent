@@ -1,4 +1,6 @@
-import { useCallback, useDeferredValue, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import Swal from 'sweetalert2';
 import {
   X,
   Eye,
@@ -53,11 +55,7 @@ interface Expediente {
   vistaMayorUltEjecutoria: string | boolean;
 }
 
-declare global {
-  interface Window {
-    cumplimientosBackend: any;
-  }
-}
+// TypeScript will resolve global cumplimientosBackend from typings file
 
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_OVERSCAN_ROWS = 14;
@@ -476,6 +474,7 @@ function buildDateFilterTree(options: string[]): DateFilterTreeNode[] {
       id: 'empty',
       label: '(Vacías)',
       values: emptyValues,
+      children: [],
     });
   }
 
@@ -642,13 +641,14 @@ export default function CumplimientosExcel({
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [selectedExpediente, setSelectedExpediente] = useState<Expediente | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [expedienteToDelete, setExpedienteToDelete] = useState<Expediente | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const tableViewportRef = useRef<HTMLDivElement | null>(null);
   const [visibleRows, setVisibleRows] = useState({ start: 0, end: 80 });
   const [sortLevels, setSortLevels] = useState<SortLevel[]>(loadSavedSortLevels);
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
   const [showModalOrdenar, setShowModalOrdenar] = useState(false);
   const [selectedSortLevelId, setSelectedSortLevelId] = useState('');
-  const [showReglas, setShowReglas] = useState(false);
   const [showMenuAcciones, setShowMenuAcciones] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState<Expediente | null>(null);
@@ -695,6 +695,7 @@ export default function CumplimientosExcel({
   const [filtroMateriaBusq, setFiltroMateriaBusq] = useState('');
   const [filtroFirmaBusq, setFiltroFirmaBusq] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const [excelFilterEnabled, setExcelFilterEnabled] = useState(false);
   const [tableColumnFilters, setTableColumnFilters] = useState<Partial<Record<SortColumnKey, string[]>>>({});
   const [openTableFilter, setOpenTableFilter] = useState<SortColumnKey | null>(null);
@@ -2004,6 +2005,39 @@ export default function CumplimientosExcel({
     setIsEditing(true);
   };
 
+  const handleDeleteExpediente = (expedienteToDelete: Expediente) => {
+    setExpedienteToDelete(expedienteToDelete);
+  };
+
+  const confirmDeleteExpediente = async () => {
+    if (!expedienteToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      if (!window.cumplimientosBackend || !window.cumplimientosBackend.delete) {
+        throw new Error('La función de eliminar no está implementada en el backend.');
+      }
+      await window.cumplimientosBackend.delete(expedienteToDelete.id);
+      
+      toastSuccess(`Expediente ${expedienteToDelete.numeroJuicio} eliminado`);
+      
+      // Refrescar la lista
+      const rows = await window.cumplimientosBackend.list();
+      setExpedientes(rows);
+      
+      if (selectedExpediente && selectedExpediente.id === expedienteToDelete.id) {
+        setSelectedExpediente(null);
+        setSelectedRowId(null);
+      }
+      setExpedienteToDelete(null);
+    } catch (err: any) {
+      console.error('Error eliminando expediente:', err);
+      toastError('Error al eliminar el expediente');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const cancelEditExpediente = () => {
     setEditDraft(null);
     setEditError('');
@@ -2541,60 +2575,7 @@ export default function CumplimientosExcel({
             <span className="lg:hidden">ACTUALIZAR</span>
           </button>
         )}
-        <button
-          onClick={() => setShowReglas(true)}
-          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 border border-blue-700 text-white rounded text-[11px] md:text-xs font-semibold shadow-sm hover:bg-blue-700 transition-colors sm:ml-auto"
-        >
-          <Info className="w-3 h-3" />
-          <span>REGLAS DE CALCULO</span>
-        </button>
       </div>
-
-      {/* REGLAS DE CALCULO */}
-      {showReglas && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setShowReglas(false)}
-        >
-          <div
-            className="w-full max-w-3xl max-h-[76vh] overflow-y-auto bg-blue-50 border border-blue-200 rounded-lg p-3 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex items-start gap-2 min-w-0">
-            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-            <h3 className="text-xs md:text-sm font-semibold text-blue-900">Reglas de Cálculo del Sistema</h3>
-          </div>
-            <button
-              type="button"
-              onClick={() => setShowReglas(false)}
-              className="p-1.5 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
-              title="Cerrar"
-            >
-              <X className="w-4 h-4 text-blue-800" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] md:text-[11px] text-blue-900">
-            <div className="bg-white/60 rounded p-2">
-              <p className="font-semibold mb-1">ULT. EJECUTORIA:</p>
-              <p>Fecha mas reciente entre FECHA EJECUTORIA COLEGIADO, FECHA EJECUTORIA INCONFORMIDAD, FECHA DE EJECUTORIA y FECHA POR NO CUMPLIDA.</p>
-            </div>
-            <div className="bg-white/60 rounded p-2">
-              <p className="font-semibold mb-1">DÍAS NATURALES TRANSCURRIDOS:</p>
-              <p>Días desde ÚLTIMO REQUERIMIENTO hasta hoy.</p>
-            </div>
-            <div className="bg-white/60 rounded p-2">
-              <p className="font-semibold mb-1">DÍAS HÁBILES TRANSCURRIDOS:</p>
-              <p>Si existe ULTIMO REQUERIMIENTO, calcula DIAS.LAB.INTL desde ULTIMO REQUERIMIENTO hasta hoy, descontando sabados, domingos y días inhábiles, y resta 1 como en Excel.</p>
-            </div>
-            <div className="bg-white/60 rounded p-2">
-              <p className="font-semibold mb-1">ESTATUS:</p>
-              <p>Queda vacío si falta ULTIMO REQUERIMIENTO o si existe SE DECLARO SIN MATERIA, FECHA DE VISTA, REVISION CONTRA SENTENCIA, FECHA DE CUMPLIMIENTO o CUMPLIMIENTO &lt; FECHA EJECUTORIA. Si no, muestra DIAS.LAB.INTL sin restar 1: 0-3 verde, 4-6 amarillo, 7-9 rojo claro, 10+ rojo.</p>
-            </div>
-          </div>
-        </div>
-        </div>
-      )}
 
       {/* ORDENAMIENTO SUPERIOR */}
       <div
@@ -2631,7 +2612,16 @@ export default function CumplimientosExcel({
             <div className="relative">
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === 'estatus' ? null : 'estatus'); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown(openDropdown === 'estatus' ? null : 'estatus'); 
+                }}
                 className="h-8 pl-3 pr-8 border border-slate-200 hover:border-slate-300 rounded-lg bg-white text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 cursor-pointer flex items-center justify-between min-w-[125px] text-left relative"
               >
                 <span>
@@ -2640,9 +2630,10 @@ export default function CumplimientosExcel({
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </button>
-              {openDropdown === 'estatus' && (
+              {openDropdown === 'estatus' && dropdownCoords && createPortal(
                 <div 
-                  className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto min-w-[145px] py-1 ring-1 ring-black/5"
+                  style={{ position: 'absolute', top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px`, minWidth: '145px', zIndex: 999999 }}
+                  className="bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {[
@@ -2661,7 +2652,8 @@ export default function CumplimientosExcel({
                       {opt.label}
                     </div>
                   ))}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
@@ -2674,8 +2666,26 @@ export default function CumplimientosExcel({
                 type="text"
                 placeholder={filtroJuicio || 'Buscar juicio...'}
                 value={filtroJuicioBusq}
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown('juicio'); }}
-                onChange={(e) => { setFiltroJuicioBusq(e.target.value); setOpenDropdown('juicio'); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown('juicio'); 
+                }}
+                onChange={(e) => { 
+                  setFiltroJuicioBusq(e.target.value); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown('juicio'); 
+                }}
                 className="h-8 pl-3 pr-8 border border-slate-200 hover:border-slate-300 rounded-lg bg-white text-[11px] font-medium text-slate-700 shadow-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 placeholder:text-slate-400 placeholder:font-normal"
               />
               {filtroJuicio ? (
@@ -2688,9 +2698,10 @@ export default function CumplimientosExcel({
               ) : (
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               )}
-              {openDropdown === 'juicio' && (
+              {openDropdown === 'juicio' && dropdownCoords && createPortal(
                 <div 
-                  className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto min-w-[180px] py-1 ring-1 ring-black/5"
+                  style={{ position: 'absolute', top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px`, minWidth: '180px', zIndex: 999999 }}
+                  className="bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div
@@ -2713,7 +2724,8 @@ export default function CumplimientosExcel({
                       </div>
                     ))
                   )}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
@@ -2726,8 +2738,26 @@ export default function CumplimientosExcel({
                 type="text"
                 placeholder={filtroMateria || 'Buscar materia...'}
                 value={filtroMateriaBusq}
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown('materia'); }}
-                onChange={(e) => { setFiltroMateriaBusq(e.target.value); setOpenDropdown('materia'); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown('materia'); 
+                }}
+                onChange={(e) => { 
+                  setFiltroMateriaBusq(e.target.value); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown('materia'); 
+                }}
                 className="h-8 pl-3 pr-8 border border-slate-200 hover:border-slate-300 rounded-lg bg-white text-[11px] font-medium text-slate-700 shadow-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 placeholder:text-slate-400 placeholder:font-normal"
               />
               {filtroMateria ? (
@@ -2740,9 +2770,10 @@ export default function CumplimientosExcel({
               ) : (
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               )}
-              {openDropdown === 'materia' && (
+              {openDropdown === 'materia' && dropdownCoords && createPortal(
                 <div 
-                  className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto min-w-[160px] py-1 ring-1 ring-black/5"
+                  style={{ position: 'absolute', top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px`, minWidth: '160px', zIndex: 999999 }}
+                  className="bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div
@@ -2765,7 +2796,8 @@ export default function CumplimientosExcel({
                       </div>
                     ))
                   )}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
@@ -2776,7 +2808,16 @@ export default function CumplimientosExcel({
             <div className="relative">
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === 'localizado' ? null : 'localizado'); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                  });
+                  setOpenDropdown(openDropdown === 'localizado' ? null : 'localizado'); 
+                }}
                 className="h-8 pl-3 pr-8 border border-slate-200 hover:border-slate-300 rounded-lg bg-white text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 cursor-pointer flex items-center justify-between min-w-[100px] text-left relative"
               >
                 <span>
@@ -2785,9 +2826,10 @@ export default function CumplimientosExcel({
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </button>
-              {openDropdown === 'localizado' && (
+              {openDropdown === 'localizado' && dropdownCoords && createPortal(
                 <div 
-                  className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl py-1 ring-1 ring-black/5 min-w-[110px]"
+                  style={{ position: 'absolute', top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px`, minWidth: '110px', zIndex: 999999 }}
+                  className="bg-white border border-slate-200/80 rounded-xl shadow-xl py-1 ring-1 ring-black/5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {[
@@ -2803,7 +2845,8 @@ export default function CumplimientosExcel({
                       {opt.label}
                     </div>
                   ))}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
@@ -2827,8 +2870,26 @@ export default function CumplimientosExcel({
                   type="text"
                   placeholder={filtroFirma || 'Buscar firma...'}
                   value={filtroFirmaBusq}
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('firma'); }}
-                  onChange={(e) => { setFiltroFirmaBusq(e.target.value); setOpenDropdown('firma'); }}
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setDropdownCoords({
+                      top: rect.bottom + window.scrollY,
+                      left: rect.left + window.scrollX,
+                      width: rect.width
+                    });
+                    setOpenDropdown('firma'); 
+                  }}
+                  onChange={(e) => { 
+                    setFiltroFirmaBusq(e.target.value); 
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setDropdownCoords({
+                      top: rect.bottom + window.scrollY,
+                      left: rect.left + window.scrollX,
+                      width: rect.width
+                    });
+                    setOpenDropdown('firma'); 
+                  }}
                   className="h-8 pl-3 pr-8 border border-slate-200 hover:border-slate-300 rounded-lg bg-white text-[11px] font-medium text-slate-700 shadow-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 placeholder:text-slate-400 placeholder:font-normal"
                 />
                 {filtroFirma ? (
@@ -2841,9 +2902,10 @@ export default function CumplimientosExcel({
                 ) : (
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 )}
-                {openDropdown === 'firma' && (
+                {openDropdown === 'firma' && dropdownCoords && createPortal(
                   <div 
-                    className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto min-w-[140px] py-1 ring-1 ring-black/5"
+                    style={{ position: 'absolute', top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px`, minWidth: '140px', zIndex: 999999 }}
+                    className="bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div
@@ -2866,7 +2928,8 @@ export default function CumplimientosExcel({
                         </div>
                       ))
                     )}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             </div>
@@ -2935,7 +2998,7 @@ export default function CumplimientosExcel({
                   onClick={() => setSelectedRowId((current) => (current === exp.id ? null : exp.id))}
                   className={`border-b border-border transition-colors cursor-pointer ${
                     isSelectedRow
-                      ? 'bg-blue-100 hover:bg-blue-100 outline outline-2 outline-blue-600 outline-offset-[-2px] shadow-[inset_4px_0_0_#1d4ed8]'
+                      ? 'bg-blue-100 hover:bg-blue-100 outline outline-1 outline-blue-400 outline-offset-[-1px] shadow-[inset_4px_0_0_#1d4ed8]'
                       : `hover:bg-accent/50 ${getRowColor(exp)}`
                   }`}
                 >
@@ -2994,17 +3057,31 @@ export default function CumplimientosExcel({
                     {formatValidation(exp.vistaMayorUltEjecutoria)}
                   </td>
                   <td className="px-2 py-1.5 text-center">
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedRowId(exp.id);
-                        setSelectedExpediente(exp);
-                      }}
-                      className="p-1 hover:bg-blue-100 rounded transition-colors"
-                      title="Ver detalle"
-                    >
-                      <Eye className="w-3 h-3 text-blue-600" />
-                    </button>
+                    <div className="flex justify-center gap-1">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedRowId(exp.id);
+                          setSelectedExpediente(exp);
+                        }}
+                        className="p-1 hover:bg-blue-100 rounded transition-colors"
+                        title="Ver detalle"
+                      >
+                        <Eye className="w-3 h-3 text-blue-600" />
+                      </button>
+                      {can('cumplimientos.edit') && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteExpediente(exp);
+                          }}
+                          className="p-1 hover:bg-red-100 rounded transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-600" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
                 );
@@ -3019,9 +3096,42 @@ export default function CumplimientosExcel({
         </div>
       </div>
 
+      {/* MODAL ELIMINAR EXPEDIENTE */}
+      {expedienteToDelete && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                ¿Eliminar expediente {expedienteToDelete.numeroJuicio}?
+              </h3>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setExpedienteToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteExpediente}
+                disabled={isDeleting}
+                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* MODAL IMPORTAR EXCEL */}
-      {showModalImportar && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      {showModalImportar && createPortal(
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
             {/* Header */}
             <div className="px-5 py-4 bg-teal-600 flex items-center justify-between">
@@ -3202,26 +3312,26 @@ export default function CumplimientosExcel({
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL ORDENAR */}
-      {showModalOrdenar && (
+      {showModalOrdenar && createPortal(
         <div
-          className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[9999] flex items-center justify-center p-4"
           onClick={() => setOpenDropdown(null)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-lg shadow-2xl border border-slate-200 overflow-hidden"
+            className="w-full max-w-[700px] bg-white rounded-md shadow-2xl border border-blue-300"
             onClick={() => setOpenDropdown(null)}
           >
-            <div className="px-3 py-2 bg-[#1e40af] text-white flex items-center justify-between">
+            <div className="px-4 py-3 bg-[#2445b5] text-white flex items-center justify-between rounded-t-md">
               <div className="flex items-center gap-3">
                 <div className="hidden">
                   <ArrowUpDown className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold tracking-wide">ORDENAMIENTO</h3>
+                  <h3 className="text-base font-extrabold tracking-wide">ORDENAMIENTO</h3>
                   <p className="hidden">
                     {draftSortLevels.length === 0
                       ? 'Sin criterios activos'
@@ -3231,33 +3341,33 @@ export default function CumplimientosExcel({
               </div>
               <button
                 onClick={() => setShowModalOrdenar(false)}
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                className="h-7 w-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
                 title="Cerrar"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-2.5 space-y-2">
-              <div className="flex items-center gap-1.5">
-                <button onClick={addSortLevel} className="h-7 px-2.5 flex items-center justify-center gap-1 rounded-md bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 transition-colors">
-                  <Plus className="w-4 h-4" />
+            <div className="p-3 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <button onClick={addSortLevel} className="h-9 px-4 flex items-center justify-center gap-2 rounded bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700 transition-colors">
+                  <Plus className="w-5 h-5" />
                   Agregar
                 </button>
-                <button onClick={deleteSortLevel} disabled={!selectedSortLevelId} className="h-7 px-2.5 flex items-center justify-center gap-1 rounded-md border border-slate-300 bg-white text-slate-700 text-[10px] font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
-                  <Trash2 className="w-4 h-4 text-red-500" />
+                <button onClick={deleteSortLevel} disabled={!selectedSortLevelId} className="h-9 px-4 flex items-center justify-center gap-2 rounded border border-slate-300 bg-white text-slate-700 text-base font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
+                  <Trash2 className="w-5 h-5 text-red-500" />
                   Eliminar
                 </button>
-                <button onClick={copySortLevel} disabled={draftSortLevels.length === 0} className="h-7 px-2.5 flex items-center justify-center gap-1 rounded-md border border-slate-300 bg-white text-slate-700 text-[10px] font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
-                  <Copy className="w-4 h-4 text-slate-500" />
+                <button onClick={copySortLevel} disabled={draftSortLevels.length === 0} className="h-9 px-4 flex items-center justify-center gap-2 rounded border border-slate-300 bg-white text-slate-700 text-base font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
+                  <Copy className="w-5 h-5 text-slate-500" />
                   Copiar
                 </button>
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => moveSortLevel(-1)} disabled={!selectedSortLevelId} className="h-7 w-7 rounded-md border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Subir nivel">
-                    <ChevronUp className="w-4 h-4 text-blue-700" />
+                  <button onClick={() => moveSortLevel(-1)} disabled={!selectedSortLevelId} className="h-9 w-9 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Subir nivel">
+                    <ChevronUp className="w-5 h-5 text-blue-700" />
                   </button>
-                  <button onClick={() => moveSortLevel(1)} disabled={!selectedSortLevelId} className="h-7 w-7 rounded-md border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Bajar nivel">
-                    <ChevronDown className="w-4 h-4 text-blue-700" />
+                  <button onClick={() => moveSortLevel(1)} disabled={!selectedSortLevelId} className="h-9 w-9 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Bajar nivel">
+                    <ChevronDown className="w-5 h-5 text-blue-700" />
                   </button>
                 </div>
                 
@@ -3275,7 +3385,7 @@ export default function CumplimientosExcel({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  <div className="space-y-1 max-h-[352px] overflow-y-auto pr-1" onScroll={() => setOpenDropdown(null)}>
                     {draftSortLevels.map((level, index) => {
                       const column = getSortColumn(level.column);
                       const selected = selectedSortLevelId === level.id;
@@ -3284,52 +3394,114 @@ export default function CumplimientosExcel({
                         <div
                           key={level.id}
                           onClick={() => setSelectedSortLevelId(level.id)}
-                          className={`rounded-md border p-2 transition-colors ${selected ? 'border-blue-500 bg-blue-50/70 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                          className={`rounded border p-1.5 transition-colors ${selected ? 'border-blue-500 bg-blue-50/70 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                         >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="hidden">{String(index + 1).padStart(2, '0')}</span>
-                              <div>
-                                <p className="text-[11px] font-bold text-slate-900">{index === 0 ? 'Principal' : 'Secundario'}</p>
-                                <p className="hidden"></p>
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{index === 0 ? 'Primero' : 'Luego'}</span>
+                          <div className="flex items-center mb-1">
+                            <span className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wide">
+                              {index === 0 ? 'Ordenar por' : 'Luego por'}
+                            </span>
                           </div>
 
-                          <div className="grid grid-cols-[120px_minmax(150px,1fr)_minmax(150px,1fr)] gap-2 items-end">
+                          <div className="grid grid-cols-1 sm:grid-cols-[240px_minmax(0,1fr)] gap-2 items-end">
                             <div className="relative">
-                              <p className="text-[9px] font-bold text-slate-500 mb-0.5 uppercase tracking-wide">Columna</p>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === `col-${level.id}` ? null : `col-${level.id}`); }} className="h-8 w-full pl-2 pr-7 border border-slate-300 hover:border-blue-400 rounded-md bg-white text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative">
+                              <p className="text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wide">Columna</p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setDropdownCoords({
+                                    top: rect.bottom + window.scrollY,
+                                    left: rect.left + window.scrollX,
+                                    width: rect.width
+                                  });
+                                  setOpenDropdown(openDropdown === `col-${level.id}` ? null : `col-${level.id}`);
+                                }}
+                                className="h-7 w-full pl-2 pr-6 border border-slate-300 hover:border-blue-400 rounded bg-white text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative"
+                              >
                                 <span className="truncate">{column.label}</span>
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </button>
-                              {openDropdown === `col-${level.id}` && (
-                                <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-y-auto w-full py-1 ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
+                              {openDropdown === `col-${level.id}` && dropdownCoords && createPortal(
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: `${dropdownCoords.top}px`,
+                                    left: `${dropdownCoords.left}px`,
+                                    width: `${dropdownCoords.width}px`,
+                                    zIndex: 999999
+                                  }}
+                                  className="bg-white border border-slate-200 rounded shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   {SORT_COLUMNS.map((option) => (
-                                    <div key={option.key} className={`px-3 py-1.5 text-[11px] cursor-pointer border-l-2 ${level.column === option.key ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`} onClick={() => { updateSortLevel(level.id, { column: option.key }); setOpenDropdown(null); }}>
+                                    <div
+                                      key={option.key}
+                                      className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.column === option.key ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                      onClick={() => {
+                                        updateSortLevel(level.id, { column: option.key });
+                                        setOpenDropdown(null);
+                                      }}
+                                    >
                                       {option.label}
                                     </div>
                                   ))}
-                                </div>
+                                </div>,
+                                document.body
                               )}
                             </div>
 
                             <div className="relative">
-                              <p className="text-[9px] font-bold text-slate-500 mb-0.5 uppercase tracking-wide">Orden</p>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === `order-${level.id}` ? null : `order-${level.id}`); }} className="h-8 w-full pl-2 pr-7 border border-slate-300 hover:border-blue-400 rounded-md bg-white text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative">
+                              <p className="text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wide">Orden</p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setDropdownCoords({
+                                    top: rect.bottom + window.scrollY,
+                                    left: rect.left + window.scrollX,
+                                    width: rect.width
+                                  });
+                                  setOpenDropdown(openDropdown === `order-${level.id}` ? null : `order-${level.id}`);
+                                }}
+                                className="h-7 w-full pl-2 pr-6 border border-slate-300 hover:border-blue-400 rounded bg-white text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative"
+                              >
                                 <span className="truncate">{getSortOrderLabel(column, level.direction)}</span>
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </button>
-                              {openDropdown === `order-${level.id}` && (
-                                <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl py-1 ring-1 ring-black/5 w-full" onClick={(e) => e.stopPropagation()}>
-                                  <div className={`px-3 py-1.5 text-[11px] cursor-pointer border-l-2 ${level.direction === 'ASC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`} onClick={() => { updateSortLevel(level.id, { direction: 'ASC' }); setOpenDropdown(null); }}>
+                              {openDropdown === `order-${level.id}` && dropdownCoords && createPortal(
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: `${dropdownCoords.top}px`,
+                                    left: `${dropdownCoords.left}px`,
+                                    width: `${dropdownCoords.width}px`,
+                                    zIndex: 999999
+                                  }}
+                                  className="bg-white border border-slate-200 rounded shadow-xl py-1 ring-1 ring-black/5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div
+                                    className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.direction === 'ASC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                    onClick={() => {
+                                      updateSortLevel(level.id, { direction: 'ASC' });
+                                      setOpenDropdown(null);
+                                    }}
+                                  >
                                     {getSortOrderLabel(column, 'ASC')}
                                   </div>
-                                  <div className={`px-3 py-1.5 text-[11px] cursor-pointer border-l-2 ${level.direction === 'DESC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`} onClick={() => { updateSortLevel(level.id, { direction: 'DESC' }); setOpenDropdown(null); }}>
+                                  <div
+                                    className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.direction === 'DESC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                    onClick={() => {
+                                      updateSortLevel(level.id, { direction: 'DESC' });
+                                      setOpenDropdown(null);
+                                    }}
+                                  >
                                     {getSortOrderLabel(column, 'DESC')}
                                   </div>
-                                </div>
+                                </div>,
+                                document.body
                               )}
                             </div>
                           </div>
@@ -3341,16 +3513,16 @@ export default function CumplimientosExcel({
               </div>
             </div>
 
-            <div className="px-3 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button onClick={() => setShowModalOrdenar(false)} className="min-w-[90px] px-3 py-2 bg-white border border-slate-300 rounded-md text-[11px] font-semibold hover:bg-slate-100">Cancelar</button>
-              <button onClick={applySortLevels} className="min-w-[100px] px-3 py-2 bg-[#1e40af] text-white rounded-md text-[11px] font-semibold hover:bg-blue-800">Aplicar</button>
+            <div className="px-4 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 rounded-b-md">
+              <button onClick={() => setShowModalOrdenar(false)} className="min-w-[135px] px-5 py-3 bg-white border border-slate-300 rounded text-base font-semibold hover:bg-slate-100">Cancelar</button>
+              <button onClick={applySortLevels} className="min-w-[150px] px-5 py-3 bg-[#2445b5] text-white rounded text-base font-bold hover:bg-blue-800">Aplicar</button>
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
       {/* MODAL AGREGAR NUEVOS EXPEDIENTES POR RANGO */}
-      {showModalAgregar && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      {showModalAgregar && createPortal(
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-center p-4">
           <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 md:p-6 border-b border-border flex items-center justify-between bg-[#1e40af] text-white rounded-t-lg">
               <h3 className="text-sm md:text-base font-bold">Agregar Nuevos Expedientes por Rango</h3>
@@ -3525,12 +3697,12 @@ export default function CumplimientosExcel({
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL ACTUALIZAR DESDE SENTENCIAS */}
-      {showModalActualizar && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      {showModalActualizar && createPortal(
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-center p-4">
           <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 md:p-6 border-b border-border flex items-center justify-between bg-[#1e40af] text-white rounded-t-lg">
               <h3 className="text-sm md:text-base font-bold">Actualizar desde SENTENCIAS</h3>
@@ -3698,12 +3870,12 @@ export default function CumplimientosExcel({
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* PANEL LATERAL DE DETALLE - RESPONSIVE */}
-      {selectedExpediente && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-end">
+      {selectedExpediente && createPortal(
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-end">
           <div className="w-full md:max-w-xl lg:max-w-2xl h-full bg-white shadow-2xl flex flex-col">
             <div className="p-4 md:p-6 border-b border-border flex items-center justify-between bg-[#1e40af] text-white">
               <div>
@@ -3733,35 +3905,7 @@ export default function CumplimientosExcel({
                 />
               </div>
 
-              {getAlertas(selectedExpediente).length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-semibold flex items-center gap-2">
-                    <AlertTriangle className="w-3 h-3 text-orange-500" />
-                    Alertas
-                  </h4>
-                  {getAlertas(selectedExpediente).map((alerta, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex items-start gap-2 p-2 md:p-3 rounded-lg border ${
-                        alerta.tipo === 'error'
-                          ? 'bg-red-50 border-red-200'
-                          : alerta.tipo === 'warning'
-                          ? 'bg-yellow-50 border-yellow-200'
-                          : 'bg-blue-50 border-blue-200'
-                      }`}
-                    >
-                      <AlertTriangle className={`w-3 h-3 flex-shrink-0 mt-0.5 ${
-                        alerta.tipo === 'error'
-                          ? 'text-red-600'
-                          : alerta.tipo === 'warning'
-                          ? 'text-yellow-600'
-                          : 'text-blue-600'
-                      }`} />
-                      <p className="text-[10px] md:text-[11px] font-medium">{alerta.texto}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+
 
               <div className="space-y-3">
                 <h4 className="text-xs font-semibold border-b pb-2">Informacion General</h4>
@@ -3852,6 +3996,7 @@ export default function CumplimientosExcel({
                         Editar
                       </button>
                     )}
+
                     <button
                       onClick={() => {
                         setSelectedExpediente(null);
@@ -3886,7 +4031,7 @@ export default function CumplimientosExcel({
               </div>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

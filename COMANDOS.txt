@@ -1,5 +1,5 @@
 GENERAR LICENCIAS
-node scripts/license-keygen.js A3567567-BE23-44F1-8F1A-3C1FFD6780D2 --expiry 2026-05-27
+node scripts/license-keygen.js 56B0DE2F-4E02-436A-89AA-48B4D84C8ADD --expiry 2026-07-01
 ---------------------------------------------------------------
 COMANDOS PARA PRUEBAS
 node scripts/license-keygen.js MACHINE_ID --minutes 8

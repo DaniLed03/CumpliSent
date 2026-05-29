@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const crypto = require('crypto');
 const { execSync } = require('child_process');
@@ -168,11 +168,27 @@ const extractGuidFromText = (text) => {
 const getWindowsDeviceGuid = () => {
   if (process.platform !== 'win32') return '';
 
+  // 1. Try SQMClient\MachineId FIRST — this matches the "Identificador de dispositivo"
+  //    shown in Windows System Properties (~5ms)
+  let regVal = run('reg query "HKLM\\SOFTWARE\\Microsoft\\SQMClient" /v MachineId');
+  let guid = extractGuidFromText(regVal);
+  if (guid) return guid;
+
+  // 2. Fallback: Cryptography\MachineGuid (different GUID, ~5ms)
+  regVal = run('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid');
+  guid = extractGuidFromText(regVal);
+  if (guid) return guid;
+
+  // 3. Fallback to wmic csproduct get uuid (slower, ~100ms)
+  regVal = run('wmic csproduct get uuid /value');
+  guid = extractGuidFromText(regVal);
+  if (guid) return guid;
+
+  // 4. Ultimate slow fallback to powershell command
   const commands = [
     'powershell -NoProfile -Command "(Get-ItemProperty -Path \'HKLM:\\SOFTWARE\\Microsoft\\SQMClient\').MachineId"',
-    'powershell -NoProfile -Command "(Get-ItemProperty -Path \'HKLM:\\SOFTWARE\\Microsoft\\Cryptography\').MachineGuid"',
     'powershell -NoProfile -Command "(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID"',
-    'wmic csproduct get uuid /value'
+    'powershell -NoProfile -Command "(Get-ItemProperty -Path \'HKLM:\\SOFTWARE\\Microsoft\\Cryptography\').MachineGuid"'
   ];
 
   for (const command of commands) {
@@ -559,10 +575,8 @@ const getLicenseState = () => {
     };
   }
 
-  const machineId = getMachineFingerprint();
-  const shouldCheckLegacy = machineId.includes('-');
-  const legacyMachineId = shouldCheckLegacy ? getLegacyMachineFingerprint() : '';
   const reg = regGetValues();
+  const machineId = getMachineFingerprint();
   const serial = reg.Serial || '';
   const expiry = reg.Expiry || '';
   const savedMid = reg.MachineId || '';
@@ -580,15 +594,37 @@ const getLicenseState = () => {
     return { ...base, status: 'missing_serial', message: 'No hay serial registrado.' };
   }
 
-  const legacyMatch = Boolean(legacyMachineId && savedMid && savedMid === legacyMachineId);
-  if (savedMid && savedMid !== machineId && !legacyMatch) {
-    return { ...base, status: 'machine_mismatch', message: 'La licencia esta ligada a otro equipo.' };
+  // Determine if this machine legitimately owns the license
+  let validationId = machineId;
+  let needsMigration = false;
+
+  if (savedMid && savedMid !== machineId) {
+    // Case 1: Saved MachineId is a legacy SHA256 hex (64 chars, no dashes)
+    const isLegacySaved = savedMid.length === 64 && !savedMid.includes('-');
+    if (isLegacySaved) {
+      const legacyMachineId = getLegacyMachineFingerprint();
+      if (legacyMachineId && savedMid === legacyMachineId) {
+        validationId = legacyMachineId;
+        needsMigration = true;
+      } else {
+        return { ...base, status: 'machine_mismatch', message: 'La licencia esta ligada a otro equipo.' };
+      }
+    } else {
+      // Case 2: Saved MachineId is a GUID but different from current
+      // (GUID source priority changed, e.g., Cryptography vs SQMClient vs wmic).
+      // Verify via Sig that the license was legitimately created with that savedMid.
+      if (expiry && sig && sig === hmacHex(savedMid, expiry)) {
+        validationId = savedMid;
+        needsMigration = true;
+      } else {
+        return { ...base, status: 'machine_mismatch', message: 'La licencia esta ligada a otro equipo.' };
+      }
+    }
   }
   if (!expiry) {
     return { ...base, status: 'missing_expiry', message: 'No hay fecha de vencimiento registrada.' };
   }
 
-  const validationId = legacyMatch ? legacyMachineId : machineId;
   const expectedSig = hmacHex(validationId, expiry);
   if (sig !== expectedSig) {
     return {
@@ -618,7 +654,9 @@ const getLicenseState = () => {
 
   const daysLeft = Math.max(0, Math.ceil((expDate.getTime() - now.getTime()) / 86400000));
   regSetValues({ LastRun: dateTimeIso() });
-  if (legacyMatch && machineId !== legacyMachineId) {
+
+  // Migrate to current GUID source if needed (legacy SHA256 → GUID, or old GUID → new GUID)
+  if (needsMigration) {
     const updates = {
       MachineId: machineId,
       Sig: hmacHex(machineId, expiry)
@@ -642,15 +680,32 @@ const activateSerial = (serialInput) => {
   }
 
   const machineId = getMachineFingerprint();
-  const shouldCheckLegacy = machineId.includes('-');
-  const legacyMachineId = shouldCheckLegacy ? getLegacyMachineFingerprint() : '';
   const reg = regGetValues();
   const usedLine = reg.Used || '';
   const usedSig = reg.UsedSig || '';
 
+  // Helper to lazily compute legacy fingerprint only if needed
+  let legacyMachineIdCached = null;
+  const getLegacyMachineIdLazy = () => {
+    if (legacyMachineIdCached !== null) return legacyMachineIdCached;
+    const shouldCheckLegacy = machineId.includes('-');
+    legacyMachineIdCached = shouldCheckLegacy ? getLegacyMachineFingerprint() : '';
+    return legacyMachineIdCached;
+  };
+
   if (usedSig && usedSig !== hmacHex(machineId, usedLine)) {
-    const legacyValid = legacyMachineId && usedSig === hmacHex(legacyMachineId, usedLine);
-    if (!legacyValid) {
+    let usedSigValid = false;
+    // Try legacy SHA256 machine ID
+    const legacyMachineId = getLegacyMachineIdLazy();
+    if (legacyMachineId && usedSig === hmacHex(legacyMachineId, usedLine)) {
+      usedSigValid = true;
+    }
+    // Try stored MachineId from registry (different GUID source from same machine)
+    const savedMid = reg.MachineId || '';
+    if (!usedSigValid && savedMid && savedMid !== machineId && usedSig === hmacHex(savedMid, usedLine)) {
+      usedSigValid = true;
+    }
+    if (!usedSigValid) {
       return { ok: false, message: 'Integridad de la lista de seriales usada no valida.' };
     }
   }
@@ -663,8 +718,18 @@ const activateSerial = (serialInput) => {
   }
 
   let parsed = parseAndVerifySerial(machineId, normalized);
-  if (!parsed && legacyMachineId && legacyMachineId !== machineId) {
-    parsed = parseAndVerifySerial(legacyMachineId, normalized);
+  if (!parsed) {
+    const legacyMachineId = getLegacyMachineIdLazy();
+    if (legacyMachineId && legacyMachineId !== machineId) {
+      parsed = parseAndVerifySerial(legacyMachineId, normalized);
+    }
+  }
+  // Also try stored MachineId (in case serial was generated for a different GUID source)
+  if (!parsed) {
+    const savedMid = reg.MachineId || '';
+    if (savedMid && savedMid !== machineId) {
+      parsed = parseAndVerifySerial(savedMid, normalized);
+    }
   }
   if (!parsed) {
     return { ok: false, message: 'El SERIAL no corresponde a este equipo o el formato es incorrecto.' };

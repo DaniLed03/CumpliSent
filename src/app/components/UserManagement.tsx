@@ -16,16 +16,20 @@ import {
 } from 'lucide-react';
 import { showStyledAlert } from '../utils/alert';
 import { toastSuccess } from '../utils/toast';
+import { EditarUsuarioModal, NuevoUsuarioModal } from './modals/SystemModals';
 
 export default function UserManagement({
   canCreate = true,
   canEdit = true,
+  canAssignMesa = false,
 }: {
   canCreate?: boolean;
   canEdit?: boolean;
+  canAssignMesa?: boolean;
 }) {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [mesas, setMesas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -40,16 +44,19 @@ export default function UserManagement({
   const [formNombre, setFormNombre] = useState('');
   const [formIdRol, setFormIdRol] = useState(3);
   const [formActivo, setFormActivo] = useState(true);
+  const [formIdMesa, setFormIdMesa] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [u, r] = await Promise.all([
+      const [u, r, m] = await Promise.all([
         window.api.listUsers(),
         window.api.listRoles(),
+        window.api.listMesas(),
       ]);
       setUsers(u);
       setRoles(r);
+      setMesas(m || []);
     } catch {
       // ignore
     } finally {
@@ -68,6 +75,7 @@ export default function UserManagement({
     setFormNombre('');
     setFormIdRol(3);
     setFormActivo(true);
+    setFormIdMesa(null);
     setFormError('');
     setEditingUser(null);
     setShowForm(false);
@@ -78,7 +86,7 @@ export default function UserManagement({
     setShowForm(true);
   }
 
-  function openEdit(user: UserRecord) {
+  function openEdit(user: any) {
     setEditingUser(user);
     setFormUsuario(user.Usuario);
     setFormPassword('');
@@ -86,6 +94,7 @@ export default function UserManagement({
     setFormNombre(user.NombreCompleto);
     setFormIdRol(user.IdRol);
     setFormActivo(user.Activo);
+    setFormIdMesa(user.IdMesa || null);
     setFormError('');
     setShowForm(true);
   }
@@ -103,6 +112,9 @@ export default function UserManagement({
           Activo: formActivo,
           NombreCompleto: formNombre,
         };
+        if (canAssignMesa) {
+          updateData.IdMesa = formIdMesa;
+        }
         if (formPassword) {
           updateData.Password = formPassword;
         }
@@ -129,6 +141,7 @@ export default function UserManagement({
           Password: formPassword,
           IdRol: formIdRol,
           NombreCompleto: formNombre,
+          IdMesa: canAssignMesa ? formIdMesa : null,
         });
         if (!result.ok) {
           setFormError(result.error || 'Error al crear usuario');
@@ -152,6 +165,109 @@ export default function UserManagement({
         text: err.message || 'Error inesperado',
         icon: 'error',
       });
+    } finally {
+      setFormLoading(false);
+    }
+  }
+
+  async function handleCreateUserModal(userData: {
+    Usuario: string;
+    NombreCompleto: string;
+    Password: string;
+    IdRol: number;
+    IdMesa: number | null;
+  }) {
+    setFormError('');
+    setFormLoading(true);
+
+    try {
+      if (!userData.Usuario || !userData.Password) {
+        setFormError('Usuario y contrasena son requeridos');
+        return false;
+      }
+
+      const result = await window.api.createUser({
+        Usuario: userData.Usuario,
+        Password: userData.Password,
+        IdRol: userData.IdRol,
+        NombreCompleto: userData.NombreCompleto,
+        IdMesa: canAssignMesa ? userData.IdMesa : null,
+      });
+
+      if (!result.ok) {
+        setFormError(result.error || 'Error al crear usuario');
+        showStyledAlert({
+          title: 'Error del sistema',
+          text: result.error || 'Error al crear usuario',
+          icon: 'error',
+        });
+        return false;
+      }
+
+      resetForm();
+      await loadData();
+      toastSuccess('Operacion completada', 'Los cambios se guardaron correctamente.');
+      return true;
+    } catch (err: any) {
+      setFormError(err.message || 'Error inesperado');
+      showStyledAlert({
+        title: 'Error del sistema',
+        text: err.message || 'Error inesperado',
+        icon: 'error',
+      });
+      return false;
+    } finally {
+      setFormLoading(false);
+    }
+  }
+
+  async function handleEditUserModal(userData: {
+    NombreCompleto: string;
+    Password?: string;
+    IdRol: number;
+    IdMesa?: number | null;
+    Activo: boolean;
+  }) {
+    if (!editingUser) return false;
+    setFormError('');
+    setFormLoading(true);
+
+    try {
+      const updateData: any = {
+        IdRol: userData.IdRol,
+        Activo: userData.Activo,
+        NombreCompleto: userData.NombreCompleto,
+      };
+      if (canAssignMesa) {
+        updateData.IdMesa = userData.IdMesa ?? null;
+      }
+      if (userData.Password) {
+        updateData.Password = userData.Password;
+      }
+
+      const result = await window.api.updateUser(editingUser.IdUsuario, updateData);
+      if (!result.ok) {
+        setFormError(result.error || 'Error al actualizar');
+        showStyledAlert({
+          title: 'Error del sistema',
+          text: result.error || 'Error al actualizar',
+          icon: 'error',
+        });
+        return false;
+      }
+
+      resetForm();
+      await loadData();
+      toastSuccess('Operacion completada', 'Los cambios se guardaron correctamente.');
+      return true;
+    } catch (err: any) {
+      setFormError(err.message || 'Error inesperado');
+      showStyledAlert({
+        title: 'Error del sistema',
+        text: err.message || 'Error inesperado',
+        icon: 'error',
+      });
+      return false;
     } finally {
       setFormLoading(false);
     }
@@ -229,13 +345,14 @@ export default function UserManagement({
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Usuario</th>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Nombre</th>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Rol</th>
+                <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Mesa</th>
                 <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px]">Estado</th>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Creado</th>
                 <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px]">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredUsers.map((user) => (
+              {filteredUsers.map((user: any) => (
                 <tr key={user.IdUsuario} className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 font-medium">{user.Usuario}</td>
                   <td className="px-4 py-3 text-muted-foreground">{user.NombreCompleto || '—'}</td>
@@ -244,6 +361,9 @@ export default function UserManagement({
                       <Shield className="w-3 h-3" />
                       {user.Rol}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {mesas.find(m => m.ID_MESA === user.IdMesa)?.MESA || '—'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {user.Activo ? (
@@ -365,6 +485,25 @@ export default function UserManagement({
                   ))}
                 </select>
               </div>
+
+              {/* Mesa selection */}
+              {canAssignMesa && (
+                <div className="module-field">
+                  <label className="module-label">Mesa Asignada</label>
+                  <select
+                    value={formIdMesa || ''}
+                    onChange={(e) => setFormIdMesa(e.target.value ? Number(e.target.value) : null)}
+                    className="module-select"
+                  >
+                    <option value="">Sin mesa asignada</option>
+                    {mesas.filter(m => m.ACTIVO === 1 || m.ID_MESA === formIdMesa).map((m) => (
+                      <option key={m.ID_MESA} value={m.ID_MESA}>
+                        {m.MESA} - {m.NOMBRE || 'Sin encargado'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Active */}
               {editingUser && (

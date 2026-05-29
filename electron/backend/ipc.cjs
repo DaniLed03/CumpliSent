@@ -7,6 +7,7 @@ const {
   importCumplimientosRows,
   initializeStore,
   patchCumplimiento,
+  deleteCumplimiento,
   recalculateCumplimientos,
   replaceDiasInhabiles,
   updateCumplimientosDesdeSentencias,
@@ -25,6 +26,7 @@ function registerCumplimientosHandlers() {
   ipcMain.handle('cumplimientos:add', (_event, rows) => addCumplimientos(rows));
   ipcMain.handle('cumplimientos:import-rows', (_event, rows) => importCumplimientosRows(rows));
   ipcMain.handle('cumplimientos:patch', (_event, id, patch) => patchCumplimiento(id, patch));
+  ipcMain.handle('cumplimientos:delete', (_event, id) => deleteCumplimiento(id));
   ipcMain.handle('cumplimientos:recalculate', () => recalculateCumplimientos());
   ipcMain.handle('cumplimientos:update-from-sentencias', (_event, rows) => updateCumplimientosDesdeSentencias(rows));
   ipcMain.handle('inhabiles:list', () => getDiasInhabiles());

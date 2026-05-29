@@ -1,3 +1,5 @@
+const toIsoDateCache = new Map();
+
 function toIsoDate(value) {
   if (!value) {
     return '';
@@ -12,6 +14,18 @@ function toIsoDate(value) {
     return new Date(excelEpoch + value * 86400000).toISOString().slice(0, 10);
   }
 
+  const cacheKey = String(value);
+  const cached = toIsoDateCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = toIsoDateUncached(value);
+  toIsoDateCache.set(cacheKey, result);
+  return result;
+}
+
+function toIsoDateUncached(value) {
   const text = String(value).trim();
   if (!text) {
     return '';
@@ -40,6 +54,7 @@ function formatIsoDate(year, month, day) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+const dateUtcCache = new Map();
 function dateUtc(isoDate) {
   const normalized = toIsoDate(isoDate);
 
@@ -47,13 +62,28 @@ function dateUtc(isoDate) {
     return null;
   }
 
+  const cached = dateUtcCache.get(normalized);
+  if (cached !== undefined) {
+    return cached ? new Date(cached) : null;
+  }
+
   const [year, month, day] = normalized.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  dateUtcCache.set(normalized, date.getTime());
+  return date;
 }
 
+let cachedTodayStr = '';
+let lastTodayUpdate = 0;
 function todayIso() {
+  const now = Date.now();
+  if (now - lastTodayUpdate < 1000 && cachedTodayStr) {
+    return cachedTodayStr;
+  }
   const today = new Date();
-  return formatIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  cachedTodayStr = formatIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  lastTodayUpdate = now;
+  return cachedTodayStr;
 }
 
 function daysBetween(startIso, endIso) {
@@ -89,20 +119,45 @@ function businessDaysInclusive(startIso, endIso, holidayDates = []) {
     return 0;
   }
 
-  const holidays = new Set(holidayDates.map(toIsoDate).filter(Boolean));
-  let count = 0;
-  const current = new Date(start);
+  const startIsoNorm = toIsoDate(startIso);
+  const endIsoNorm = toIsoDate(endIso);
 
-  while (current <= end) {
-    const iso = current.toISOString().slice(0, 10);
-    if (!isWeekend(current) && !holidays.has(iso)) {
-      count += 1;
+  const totalDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+  const startDay = start.getUTCDay();
+  const fullWeeks = Math.floor(totalDays / 7);
+  let weekendDays = fullWeeks * 2;
+  const remainingDays = totalDays % 7;
+  for (let i = 0; i < remainingDays; i++) {
+    const day = (startDay + i) % 7;
+    if (day === 0 || day === 6) {
+      weekendDays += 1;
     }
-
-    current.setUTCDate(current.getUTCDate() + 1);
   }
 
-  return count;
+  let count = totalDays - weekendDays;
+
+  if (holidayDates instanceof Set) {
+    for (const holiday of holidayDates) {
+      if (holiday && holiday >= startIsoNorm && holiday <= endIsoNorm) {
+        const hDate = dateUtc(holiday);
+        if (hDate && !isWeekend(hDate)) {
+          count -= 1;
+        }
+      }
+    }
+  } else if (Array.isArray(holidayDates)) {
+    const holidays = new Set(holidayDates.map(toIsoDate).filter(Boolean));
+    for (const holiday of holidays) {
+      if (holiday && holiday >= startIsoNorm && holiday <= endIsoNorm) {
+        const hDate = dateUtc(holiday);
+        if (hDate && !isWeekend(hDate)) {
+          count -= 1;
+        }
+      }
+    }
+  }
+
+  return Math.max(0, count);
 }
 
 function elapsedBusinessDays(startIso, endIso, holidayDates = []) {
@@ -125,12 +180,16 @@ function statusFromBusinessDays(days) {
   return 'VENCIDO';
 }
 
+function upperText(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
 function normalizarCumplimiento(row, index = 0) {
   return {
     id: String(row.id || row.numeroJuicio || index + 1),
     numeroOrden: Number(row.numeroOrden || index + 1),
-    numeroJuicio: String(row.numeroJuicio || ''),
-    materia: String(row.materia || ''),
+    numeroJuicio: upperText(row.numeroJuicio),
+    materia: upperText(row.materia),
     sentencia: toIsoDate(row.sentencia),
     fechaEjecutoriaColegiado: toIsoDate(row.fechaEjecutoriaColegiado),
     fechaEjecutoriaInconformidad: toIsoDate(row.fechaEjecutoriaInconformidad),
@@ -140,18 +199,25 @@ function normalizarCumplimiento(row, index = 0) {
     ultimoRequerimiento: toIsoDate(row.ultimoRequerimiento),
     diasNaturalesTranscurridos: row.diasNaturalesTranscurridos ?? '',
     diasHabilesTranscurridos: row.diasHabilesTranscurridos ?? '',
-    estatus: row.estatus || '',
+    estatus: upperText(row.estatus),
     seDeclaroSinMateria: toIsoDate(row.seDeclaroSinMateria),
     fechaVista: toIsoDate(row.fechaVista),
     revisionContraSentencia: toIsoDate(row.revisionContraSentencia),
     fechaCumplimiento: toIsoDate(row.fechaCumplimiento),
     fechaArchivo: toIsoDate(row.fechaArchivo),
-    cumplimientoMenorFechaEjecutoria: row.cumplimientoMenorFechaEjecutoria || '',
-    observaciones: String(row.observaciones || ''),
+    cumplimientoMenorFechaEjecutoria: upperText(row.cumplimientoMenorFechaEjecutoria),
+    observaciones: upperText(row.observaciones),
     localizado: Boolean(row.localizado),
     actualizado: toIsoDate(row.actualizado),
-    firma: String(row.firma || ''),
-    vistaMayorUltEjecutoria: row.vistaMayorUltEjecutoria || '',
+    firma: upperText(row.firma),
+    vistaMayorUltEjecutoria: upperText(row.vistaMayorUltEjecutoria),
+    idMesa: Number.isFinite(Number(row.idMesa)) ? Number(row.idMesa) : null,
+    observacionesMesa: upperText(row.observacionesMesa),
+    estatusAtendido: upperText(row.estatusAtendido),
+    fechaAcuerdo: toIsoDate(row.fechaAcuerdo),
+    observacionesDiario: upperText(row.observacionesDiario),
+    fechaCapturaTrabajo: String(row.fechaCapturaTrabajo || ''),
+    usuarioCapturaTrabajo: row.usuarioCapturaTrabajo || '',
   };
 }
 
@@ -185,9 +251,6 @@ function calcularCumplimiento(row, diasInhabiles = []) {
         ? row.fechaVista
         : 'Alerta: vista anterior a ?ltima ejecutoria';
 
-  // Campos que paran el semaforo:
-  // SE DECLARO SIN MATERIA, FECHA DE VISTA, REVISION CONTRA SENTENCIA
-  // FECHA DE CUMPLIMIENTO y CUMPLIMIENTO < FECHA EJECUTORIA.
   const estatusEnBlanco =
     !row.ultimoRequerimiento ||
     isFilled(row.seDeclaroSinMateria) ||
@@ -326,10 +389,6 @@ function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
     existente.ultimoRequerimiento
   );
 
-  // Validar lógica de Revisión Contra Sentencia basada SOLO en las columnas del archivo fuente:
-  // - Si la columna "Fecha ejecutoria Tribunal Colegiado..." del ARCHIVO tiene valor → limpiar revisionContraSentencia
-  // - Si esa columna está vacía Y la columna "Fecha interposición..." del ARCHIVO tiene valor → asignar ese valor
-  // - Si ambas columnas del archivo están vacías → conservar el valor ya existente en la BD intacto
   const fechaColegiadoFuente = sourceDateValue(pick(sentencia, [
     'FECHA EJECUTORIA TRIBUNAL COLEGIADO DE CIRCUITO CONTRA SENTENCIA',
   ]), firstTen);
@@ -341,13 +400,10 @@ function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
 
   let revisionContraSentencia;
   if (fechaColegiadoFuente) {
-    // El archivo trae fecha ejecutoria colegiado → limpiar revisión
     revisionContraSentencia = '';
   } else if (rawFechaInterposicion) {
-    // El archivo no trae ejecutoria colegiado PERO sí trae fecha interposición → asignar
     revisionContraSentencia = rawFechaInterposicion;
   } else {
-    // Ninguna columna del archivo tiene dato → preservar lo que había en la BD
     revisionContraSentencia = existente.revisionContraSentencia || '';
   }
 
@@ -398,16 +454,18 @@ function actualizarDesdeSentencias(cumplimientos, sentencias, diasInhabiles = []
       .filter(([expediente]) => expediente)
   );
 
+  const inhabilesSet = diasInhabiles instanceof Set ? diasInhabiles : new Set(diasInhabiles.map(toIsoDate).filter(Boolean));
+
   return cumplimientos.map((row, index) => {
     const sentencia = sentenciasPorExpediente.get(normalizeKey(row.numeroJuicio));
 
     if (!sentencia) {
-      return calcularCumplimiento({ ...normalizarCumplimiento(row, index), localizado: false }, diasInhabiles);
+      return calcularCumplimiento({ ...normalizarCumplimiento(row, index), localizado: false }, inhabilesSet);
     }
 
     const anterior = JSON.stringify(row);
     const actualizado = sentenciaToCumplimiento(sentencia, { ...row, localizado: true }, index);
-    const calculado = calcularCumplimiento(actualizado, diasInhabiles);
+    const calculado = calcularCumplimiento(actualizado, inhabilesSet);
     const cambio = JSON.stringify(calculado) !== anterior;
 
     return {
@@ -423,5 +481,5 @@ module.exports = {
   normalizarCumplimiento,
   sentenciaToCumplimiento,
   toIsoDate,
+  upperText,
 };
-

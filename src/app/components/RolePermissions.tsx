@@ -58,13 +58,58 @@ export default function RolePermissions({
     loadData();
   }, [loadData]);
 
+  function normalizePermissionCategory(category?: string) {
+    const raw = (category || 'GENERAL').trim();
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+
+    if (normalized === 'MESAS DE TRAMITE') {
+      return 'MESAS DE TRÁMITE';
+    }
+
+    if (normalized === 'ROLES') {
+      return 'ROLES Y PERMISOS';
+    }
+
+    return raw;
+  }
+
+  const permissionCategoryOrder = [
+    'VISTAS',
+    'CUMPLIMIENTOS',
+    'DIAS INHABILES',
+    'MESAS DE TRÁMITE',
+    'TRABAJO DIARIO',
+    'ADMINISTRACION',
+    'SERVIDOR',
+    'USUARIOS',
+    'ROLES Y PERMISOS',
+  ];
+
   const groupedPermissions = useMemo(() => {
-    return permissions.reduce<Record<string, PermissionRecord[]>>((acc, permission) => {
-      const category = permission.Categoria || 'GENERAL';
+    const seen = new Set<string>();
+
+    const groups = permissions.reduce<Record<string, PermissionRecord[]>>((acc, permission) => {
+      if (seen.has(permission.IdPermiso)) {
+        return acc;
+      }
+      seen.add(permission.IdPermiso);
+
+      const category = normalizePermissionCategory(permission.Categoria);
       if (!acc[category]) acc[category] = [];
       acc[category].push(permission);
       return acc;
     }, {});
+
+    return Object.fromEntries(
+      Object.entries(groups).sort(([categoryA], [categoryB]) => {
+        const indexA = permissionCategoryOrder.indexOf(categoryA);
+        const indexB = permissionCategoryOrder.indexOf(categoryB);
+        return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+      }),
+    );
   }, [permissions]);
 
   const filteredRoles = roles.filter((role) => {

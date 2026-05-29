@@ -3,6 +3,8 @@
 :root {
   --font-size: 14px;
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: var(--font-family);
+  --font-mono: var(--font-family);
   --background: #f8f9fa;
   --foreground: #1a1a1a;
   --card: #ffffff;
@@ -129,11 +131,16 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    font-family: inherit;
+    font-variant-numeric: inherit;
   }
 
+  html,
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-family);
+    font-variant-numeric: lining-nums proportional-nums;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
   /**
@@ -228,4 +235,24 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+code,
+kbd,
+samp,
+pre,
+.font-mono,
+[class*='font-mono'],
+.MuiTypography-root,
+.MuiButtonBase-root,
+.MuiInputBase-root,
+.MuiFormLabel-root,
+.MuiTableCell-root,
+.MuiDataGrid-root,
+.swal2-container,
+.swal2-popup,
+.swal2-title,
+.swal2-html-container,
+.swal2-styled {
+  font-family: var(--font-family) !important;
 }

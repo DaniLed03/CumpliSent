@@ -33,6 +33,13 @@ const CUMPLIMIENTOS_COLUMNS = [
   ['actualizado', 'ACTUALIZADO', 'DATE'],
   ['firma', 'FIRMA', 'TEXT'],
   ['vistaMayorUltEjecutoria', 'VISTA>ULT.EJECUTORIA', 'TEXT'],
+  ['idMesa', 'ID_MESA', 'INTEGER'],
+  ['observacionesMesa', 'OBSERVACIONES_MESA', 'TEXT'],
+  ['estatusAtendido', 'ESTATUS_ATENDIDO', 'TEXT'],
+  ['fechaAcuerdo', 'FECHA_ACUERDO', 'TEXT'],
+  ['observacionesDiario', 'OBSERVACIONES_DIARIO', 'TEXT'],
+  ['fechaCapturaTrabajo', 'FECHA_CAPTURA_TRABAJO', 'TEXT'],
+  ['usuarioCapturaTrabajo', 'USUARIO_CAPTURA_TRABAJO', 'INTEGER'],
 ];
 
 function quoteIdentifier(identifier) {
@@ -59,6 +66,10 @@ function getDb() {
   if (!db) {
     db = new DatabaseSync(databaseFile());
     db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA cache_size = -20000'); // 20MB cache
+    db.exec('PRAGMA synchronous = NORMAL'); // Faster writes in WAL mode
+    db.exec('PRAGMA temp_store = MEMORY'); // Keep temporary tables in memory
+    db.exec('PRAGMA mmap_size = 30000000000'); // Memory-mapped I/O
     initializeDatabase(db);
   }
 
@@ -79,34 +90,44 @@ function initializeDatabase(database) {
   ensureExactTableSchema(database, 'DIAS INHABILES', [['DIAS INHABILES', 'DATE NOT NULL UNIQUE']]);
   database.exec(`DROP TABLE IF EXISTS ${quoteIdentifier('CONFIGURACION')}`);
 
-  // Migrate any existing yyyy-mm-dd dates to dd/mm/aaaa
-  runTransaction(database, () => {
-    const dateColumns = CUMPLIMIENTOS_COLUMNS.filter(([, , type]) => type === 'DATE').map(([, colName]) => colName);
-    
-    dateColumns.forEach((colName) => {
-      const rows = database.prepare(`SELECT rowid, ${quoteIdentifier(colName)} AS val FROM CUMPLIMIENTOS WHERE ${quoteIdentifier(colName)} LIKE '____-__-__'`).all();
-      const updateStmt = database.prepare(`UPDATE CUMPLIMIENTOS SET ${quoteIdentifier(colName)} = ? WHERE rowid = ?`);
-      rows.forEach((row) => {
+  // Create indexes to optimize filtering and sorting
+  database.exec('CREATE INDEX IF NOT EXISTS "idx_cumplimientos_orden" ON "CUMPLIMIENTOS" ("NÚMERO DE ORDEN" ASC)');
+  database.exec('CREATE INDEX IF NOT EXISTS "idx_cumplimientos_juicio" ON "CUMPLIMIENTOS" ("NÚMERO DE JUICIO")');
+  database.exec('CREATE INDEX IF NOT EXISTS "idx_cumplimientos_estatus" ON "CUMPLIMIENTOS" ("ESTATUS")');
+  database.exec('CREATE INDEX IF NOT EXISTS "idx_cumplimientos_mesa" ON "CUMPLIMIENTOS" ("ID_MESA")');
+
+  // Migrate any existing yyyy-mm-dd dates to dd/mm/aaaa (only once)
+  const userVersion = database.prepare('PRAGMA user_version').get().user_version;
+  if (userVersion < 1) {
+    runTransaction(database, () => {
+      const dateColumns = CUMPLIMIENTOS_COLUMNS.filter(([, , type]) => type === 'DATE').map(([, colName]) => colName);
+      
+      dateColumns.forEach((colName) => {
+        const rows = database.prepare(`SELECT rowid, ${quoteIdentifier(colName)} AS val FROM CUMPLIMIENTOS WHERE ${quoteIdentifier(colName)} LIKE '____-__-__'`).all();
+        const updateStmt = database.prepare(`UPDATE CUMPLIMIENTOS SET ${quoteIdentifier(colName)} = ? WHERE rowid = ?`);
+        rows.forEach((row) => {
+          const val = row.val;
+          const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (match) {
+            const formatted = `${match[3]}/${match[2]}/${match[1]}`;
+            updateStmt.run(formatted, row.rowid);
+          }
+        });
+      });
+
+      const inhabilesRows = database.prepare(`SELECT rowid, ${quoteIdentifier('DIAS INHABILES')} AS val FROM ${quoteIdentifier('DIAS INHABILES')} WHERE ${quoteIdentifier('DIAS INHABILES')} LIKE '____-__-__'`).all();
+      const updateInhabilesStmt = database.prepare(`UPDATE ${quoteIdentifier('DIAS INHABILES')} SET ${quoteIdentifier('DIAS INHABILES')} = ? WHERE rowid = ?`);
+      inhabilesRows.forEach((row) => {
         const val = row.val;
         const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
         if (match) {
           const formatted = `${match[3]}/${match[2]}/${match[1]}`;
-          updateStmt.run(formatted, row.rowid);
+          updateInhabilesStmt.run(formatted, row.rowid);
         }
       });
     });
-
-    const inhabilesRows = database.prepare(`SELECT rowid, ${quoteIdentifier('DIAS INHABILES')} AS val FROM ${quoteIdentifier('DIAS INHABILES')} WHERE ${quoteIdentifier('DIAS INHABILES')} LIKE '____-__-__'`).all();
-    const updateInhabilesStmt = database.prepare(`UPDATE ${quoteIdentifier('DIAS INHABILES')} SET ${quoteIdentifier('DIAS INHABILES')} = ? WHERE rowid = ?`);
-    inhabilesRows.forEach((row) => {
-      const val = row.val;
-      const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (match) {
-        const formatted = `${match[3]}/${match[2]}/${match[1]}`;
-        updateInhabilesStmt.run(formatted, row.rowid);
-      }
-    });
-  });
+    database.exec('PRAGMA user_version = 1');
+  }
 }
 
 function tableInfo(database, tableName) {
@@ -589,6 +610,25 @@ function patchCumplimiento(id, patch = {}) {
   return calcularCumplimiento(normalizado, inhabiles);
 }
 
+function deleteCumplimiento(id) {
+  const database = getDb();
+  const numericId = Number(id);
+  let rowid;
+
+  if (Number.isFinite(numericId) && numericId > 0) {
+    rowid = numericId;
+  } else {
+    const found = database
+      .prepare(`SELECT rowid FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE ${quoteIdentifier('NÚMERO DE JUICIO')} = ? LIMIT 1`)
+      .get(id);
+    if (!found) throw new Error(`No se encontró el expediente con id/juicio: ${id}`);
+    rowid = found.rowid;
+  }
+
+  database.prepare(`DELETE FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE rowid = ?`).run(rowid);
+  return true;
+}
+
 module.exports = {
   addCumplimientos,
   getDatabasePath,
@@ -598,6 +638,7 @@ module.exports = {
   initializeStore,
   importCumplimientosRows,
   patchCumplimiento,
+  deleteCumplimiento,
   recalculateCumplimientos,
   replaceDiasInhabiles,
   updateCumplimientosDesdeSentencias,

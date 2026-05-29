@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   LogIn,
   Eye,
@@ -8,6 +8,8 @@ import {
   Key,
   Copy,
   Check,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { closeStyledAlert } from '../utils/alert';
 import { toastError, toastSuccess } from '../utils/toast';
@@ -47,6 +49,10 @@ function formatLicenseExpiry(expiry?: string) {
   return hour ? `${dateLabel} ${hour}:${minute} PM` : `${dateLabel} 23:59 PM`;
 }
 
+type LicenseLoaderState = 'checking' | 'valid' | 'invalid';
+
+const loaderDelay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false }: LoginScreenProps) {
   const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('adminServerUrl') || '');
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('rememberMe') === 'S');
@@ -73,45 +79,96 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
   const [serialLoading, setSerialLoading] = useState(false);
   const [serialError, setSerialError] = useState('');
   const [checkingLicense, setCheckingLicense] = useState(!skipInitialLicenseLoader);
+  const [licenseLoaderState, setLicenseLoaderState] = useState<LicenseLoaderState>('checking');
   const [copiedMachineId, setCopiedMachineId] = useState(false);
+  const rememberLoginAttemptedRef = useRef(false);
   const licenseExpiryLabel = formatLicenseExpiry(licenseStatus?.expiry);
 
   // Check license on mount
   useEffect(() => {
-    checkLicense();
+    checkLicense({ showLoader: !skipInitialLicenseLoader, autoRemember: true });
   }, []);
+
+
 
   useEffect(() => {
     if (!licenseStatus?.active) return undefined;
 
     const intervalId = window.setInterval(() => {
-      checkLicense();
+      checkLicense({ showLoader: false, autoRemember: false });
     }, 30000);
 
     return () => window.clearInterval(intervalId);
   }, [licenseStatus?.active]);
 
-  async function checkLicense() {
-    if (!skipInitialLicenseLoader) {
+  async function checkLicense(options: { showLoader?: boolean; autoRemember?: boolean } = {}) {
+    const showLoader = Boolean(options.showLoader);
+
+    if (showLoader) {
       setCheckingLicense(true);
+      setLicenseLoaderState('checking');
     }
+
+    let shouldRememberLogin = false;
+
     try {
       if (!window.api) {
         setLicenseStatus({ active: false, daysLeft: 0, serial: '', expired: false, noLicense: true });
-        setCheckingLicense(false);
+        if (showLoader) {
+          const loader = document.getElementById("legacy-boot-loader");
+          if (loader) loader.remove();
+          setLicenseLoaderState('invalid');
+          await loaderDelay(650);
+        }
         return;
       }
+      
+      if (showLoader) {
+        // Artificial delay so the user actually sees the spinning animation from the beginning,
+        // and to guarantee that Vite has fully loaded all CSS styles before we remove the static loader.
+        await loaderDelay(1200);
+      }
+
       const status = await window.api.checkLicense();
+      const isValidLicense = Boolean(status?.active && !status.expired && !status.noLicense);
       setLicenseStatus(status);
+      shouldRememberLogin = isValidLicense && Boolean(options.autoRemember);
+
+      if (showLoader) {
+        // Remove the static HTML loader perfectly when we are about to show the checkmark.
+        // Because CSS is now fully loaded, the React loader beneath it looks identical,
+        // and instantly transitions into the checkmark animation.
+        const loader = document.getElementById("legacy-boot-loader");
+        if (loader) {
+          loader.remove();
+        }
+        
+        setLicenseLoaderState(isValidLicense ? 'valid' : 'invalid');
+        await loaderDelay(isValidLicense ? 650 : 800);
+      }
     } catch {
       setLicenseStatus({ active: false, daysLeft: 0, serial: '', expired: false, noLicense: true });
+      if (showLoader) {
+        const loader = document.getElementById("legacy-boot-loader");
+        if (loader) loader.remove();
+        setLicenseLoaderState('invalid');
+        await loaderDelay(800);
+      }
     } finally {
-      setCheckingLicense(false);
+      if (showLoader) {
+        setCheckingLicense(false);
+      }
+    }
+
+    if (shouldRememberLogin) {
+      await tryRememberLogin();
     }
   }
 
   async function tryRememberLogin() {
-    if (!rememberMe) return;
+    if (!rememberMe || rememberLoginAttemptedRef.current) return;
+    rememberLoginAttemptedRef.current = true;
+
     try {
       const result = await window.api.rememberLogin?.();
       if (result?.ok && result.user) {
@@ -155,7 +212,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
       } else {
         setSerialInput('');
         toastSuccess('Licencia activada', result.message || 'La licencia se activo correctamente.');
-        await checkLicense();
+        await checkLicense({ showLoader: false, autoRemember: false });
       }
     } catch {
       setSerialError('Error al activar la licencia');
@@ -207,12 +264,28 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
 
   // ── Loading state ──
   if (checkingLicense) {
+    const loaderText =
+      licenseLoaderState === 'valid'
+        ? 'Licencia verificada'
+        : licenseLoaderState === 'invalid'
+          ? 'Licencia no encontrada'
+          : 'Verificando licencia...';
+
     return (
       <div className="login-screen auth-dvd-screen">
         <FloatingAuthIcons />
-        <div className="login-container" style={{ textAlign: 'center', padding: '3rem' }}>
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" style={{ color: '#60a5fa' }} />
-          <p style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>Verificando licencia...</p>
+        <div className="license-loader-card">
+          <img src={logoImg} className="license-loader-logo" alt="CumpliSent logo" />
+          <div className={`license-loader-status license-loader-status-${licenseLoaderState}`} aria-hidden="true">
+            {licenseLoaderState === 'checking' && <div className="license-loader-spinner" />}
+            {licenseLoaderState === 'valid' && <CheckCircle2 className="license-loader-state-icon" />}
+            {licenseLoaderState === 'invalid' && <XCircle className="license-loader-state-icon" />}
+          </div>
+          <h1 className="license-loader-title">
+            <span>Cumpli</span>
+            <strong>Sent</strong>
+          </h1>
+          <p className="license-loader-text">{loaderText}</p>
         </div>
       </div>
     );
@@ -257,7 +330,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
                   type="text"
                   value={licenseStatus.machineId || ''}
                   readOnly
-                  style={{ fontFamily: 'monospace', letterSpacing: '0.04em', paddingRight: '3rem' }}
+                  style={{ letterSpacing: '0.04em', paddingRight: '3rem' }}
                 />
                 <button
                   type="button"
@@ -280,7 +353,7 @@ export default function LoginScreen({ onLogin, skipInitialLicenseLoader = false 
                 onChange={(e) => setSerialInput(e.target.value.toUpperCase())}
                 placeholder="SERIAL V3"
                 autoFocus
-                style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                style={{ letterSpacing: '0.1em' }}
               />
             </div>
 

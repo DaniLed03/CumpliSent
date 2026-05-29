@@ -1,15 +1,17 @@
 const { app, BrowserWindow, shell } = require('electron');
+app.name = 'CumpliSent';
 const os = require('node:os');
 const path = require('node:path');
 const { registerCumplimientosHandlers } = require('./backend/ipc.cjs');
 const { registerAuthHandlers } = require('./backend/auth-ipc.cjs');
+const { registerMesasHandlers } = require('./backend/mesas-ipc.cjs');
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 const cacheDir = path.join(os.tmpdir(), 'cumplisent-cache');
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
-  app.quit();
+  app.exit(0);
 }
 
 app.commandLine.appendSwitch('disk-cache-dir', cacheDir);
@@ -24,6 +26,7 @@ function createWindow() {
     width: 1280,
     height: 800,
     show: false,
+    title: 'CumpliSent',
     autoHideMenuBar: true,
     icon: iconPath,
     webPreferences: {
@@ -35,11 +38,10 @@ function createWindow() {
   });
 
   mainWindow.setIcon(iconPath);
-  mainWindow.maximize();
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    mainWindow.maximize();
   });
-
   if (devServerUrl) {
     mainWindow.loadURL(devServerUrl);
   } else {
@@ -108,7 +110,21 @@ app.whenReady().then(() => {
   migrateDevDatabase();
   registerCumplimientosHandlers();
   registerAuthHandlers();
+  registerMesasHandlers();
   createWindow();
+
+  // Run initial daily work cleanup and schedule periodic runs
+  try {
+    const { flushTrabajoDiarioToHistory } = require('./backend/mesas-store.cjs');
+    setImmediate(() => {
+      flushTrabajoDiarioToHistory();
+    });
+    setInterval(() => {
+      flushTrabajoDiarioToHistory();
+    }, 60 * 60 * 1000);
+  } catch (err) {
+    console.error('Error initializing daily work flush schedule:', err);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -1,0 +1,188 @@
+.cumplimientos-sticky-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.cumplimientos-sticky-table thead,
+.cumplimientos-sticky-table thead tr {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 70 !important;
+}
+
+.cumplimientos-sticky-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 70 !important;
+  background: #1e40af !important;
+  box-shadow: 0 1px 0 #2563eb !important;
+}
+
+.cumplimientos-sticky-table th:nth-child(1),
+.cumplimientos-sticky-table td:nth-child(1) {
+  position: sticky !important;
+  left: 0 !important;
+  min-width: 130px !important;
+  width: 130px !important;
+}
+
+.cumplimientos-sticky-table th:nth-child(2),
+.cumplimientos-sticky-table td:nth-child(2) {
+  position: sticky !important;
+  left: 130px !important;
+  min-width: 140px !important;
+  width: 140px !important;
+}
+
+.cumplimientos-sticky-table thead th:nth-child(1),
+.cumplimientos-sticky-table thead th:nth-child(2) {
+  z-index: 90 !important;
+  background: #1e40af !important;
+  box-shadow: 1px 0 0 #2563eb, 0 1px 0 #2563eb !important;
+}
+
+.cumplimientos-sticky-table tbody td:nth-child(1),
+.cumplimientos-sticky-table tbody td:nth-child(2) {
+  z-index: 20 !important;
+  background: #ffffff !important;
+  box-shadow: 1px 0 0 var(--border), 8px 0 14px -14px rgba(15, 23, 42, 0.5) !important;
+}
+
+.cumplimientos-sticky-table tbody tr.bg-emerald-50 > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr.bg-emerald-50 > td:nth-child(2) {
+  background: var(--color-emerald-50) !important;
+}
+
+.cumplimientos-sticky-table tbody tr.bg-amber-50 > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr.bg-amber-50 > td:nth-child(2) {
+  background: var(--color-amber-50) !important;
+}
+
+.cumplimientos-sticky-table tbody tr.bg-rose-50 > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr.bg-rose-50 > td:nth-child(2) {
+  background: var(--color-rose-50) !important;
+}
+
+.cumplimientos-sticky-table tbody tr.bg-red-50 > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr.bg-red-50 > td:nth-child(2) {
+  background: var(--color-red-50) !important;
+}
+
+.cumplimientos-sticky-table tbody tr.bg-blue-100 > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr.bg-blue-100 > td:nth-child(2),
+.cumplimientos-sticky-table tbody tr[aria-selected=true] > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr[aria-selected=true] > td:nth-child(2) {
+  background: var(--color-blue-100) !important;
+  color: #1e3a8a !important;
+}
+
+.cumplimientos-sticky-table tbody tr[aria-selected=true] > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr[aria-selected=true] > td:nth-child(2) {
+  border-color: #60a5fa !important;
+  box-shadow: inset 0 1px 0 #60a5fa, inset 0 -1px 0 #60a5fa !important;
+}
+
+.cumplimientos-sticky-table tbody tr:hover > td:nth-child(1),
+.cumplimientos-sticky-table tbody tr:hover > td:nth-child(2) {
+  filter: brightness(0.985);
+}
+
+.cumplimientos-filter-bar {
+  position: relative;
+  z-index: 500;
+}
+
+.cumplimientos-filter-menu {
+  z-index: 600 !important;
+}
+
+.cumplimientos-detail-overlay {
+  z-index: 20000 !important;
+}
+.trabajo-diario-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.trabajo-diario-table thead,
+.trabajo-diario-table thead tr {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 80 !important;
+}
+
+.trabajo-diario-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 80 !important;
+  background: #1e40af !important;
+}
+
+.trabajo-diario-table th:nth-child(1),
+.trabajo-diario-table td:nth-child(1) {
+  position: sticky !important;
+  left: 0 !important;
+  min-width: 6rem !important;
+  width: 6rem !important;
+}
+
+.trabajo-diario-table th:nth-child(2),
+.trabajo-diario-table td:nth-child(2) {
+  position: sticky !important;
+  left: 6rem !important;
+  min-width: 10rem !important;
+  width: 10rem !important;
+}
+
+.trabajo-diario-table thead th:nth-child(1),
+.trabajo-diario-table thead th:nth-child(2) {
+  z-index: 120 !important;
+  background: #1e40af !important;
+  box-shadow: 1px 0 0 #2563eb, 0 1px 0 #2563eb !important;
+}
+
+.trabajo-diario-table tbody td:nth-child(1),
+.trabajo-diario-table tbody td:nth-child(2) {
+  z-index: 45 !important;
+  background: #ffffff !important;
+  box-shadow: 1px 0 0 var(--border), 8px 0 14px -14px rgba(15, 23, 42, 0.5) !important;
+}
+
+.trabajo-diario-table tbody tr.bg-blue-50\/20 > td:nth-child(1),
+.trabajo-diario-table tbody tr.bg-blue-50\/20 > td:nth-child(2) {
+  background: #f8fbff !important;
+}
+
+.trabajo-diario-table tbody tr:hover > td:nth-child(1),
+.trabajo-diario-table tbody tr:hover > td:nth-child(2) {
+  background: #f8fafc !important;
+}
+
+.trabajo-diario-table .trabajo-diario-action-cell {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  min-width: 11rem !important;
+  width: 11rem !important;
+  max-width: 11rem !important;
+}
+
+.trabajo-diario-table thead .trabajo-diario-action-cell {
+  top: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  z-index: 80 !important;
+}
+
+.trabajo-diario-table tbody .trabajo-diario-action-cell {
+  left: auto !important;
+  right: auto !important;
+  z-index: auto !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* OVERRIDE FOR MODALS */
+.z-\[9999\] {
+  z-index: 9999 !important;
+}

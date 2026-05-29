@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process');
 const http = require('node:http');
 
 const host = '127.0.0.1';
-const port = 5173;
+const port = 5183;
 const devServerUrl = `http://${host}:${port}`;
 const cleanEnv = Object.fromEntries(
   Object.entries(process.env).filter(([, value]) => typeof value === 'string')
@@ -40,7 +40,7 @@ function checkVite() {
 
 function startVite() {
   ownsVite = true;
-  vite = runNpm(['run', 'dev', '--', '--host', host, '--strictPort'], {
+  vite = runNpm(['run', 'dev', '--', '--host', host, '--port', String(port), '--strictPort'], {
     stdio: 'inherit',
     env: {
       ...cleanEnv,

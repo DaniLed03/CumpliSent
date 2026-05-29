@@ -27,6 +27,22 @@ const {
   replaceDiasInhabiles,
   updateCumplimientosDesdeSentencias,
 } = require('./store.cjs');
+const {
+  listMesas,
+  listMesasActivas,
+  createMesa,
+  updateMesa,
+  importMesasCatalog,
+  importMesaAssignments,
+  autoAssignMesas,
+  reassignMesa,
+  getAssignmentHistory,
+  captureTrabajoDiario,
+  getExpedientesByMesa,
+  getExpedientesAllMesas,
+  getHistorialTrabajoDiario,
+  flushTrabajoDiarioToHistory
+} = require('./mesas-store.cjs');
 
 /* ────────────────────────────────────────────
  * JWT Secret — generated per server session
@@ -94,6 +110,21 @@ function buildApp() {
     }
   });
 
+  app.decorate('requirePermission', (permissionId) => {
+    return async (request, reply) => {
+      if (!request.user) {
+        reply.code(401).send({ error: 'Token requerido' });
+        return;
+      }
+      const isUserAdmin = normalizeRoleName(request.user.Rol) === 'ADMINISTRADOR';
+      if (isUserAdmin) return;
+      const permissions = request.user.Permisos || [];
+      if (!permissions.includes(permissionId)) {
+        reply.code(403).send({ error: `Se requiere el permiso: ${permissionId}` });
+      }
+    };
+  });
+
   /* ── Health check ── */
   app.get('/api/health', async () => ({ ok: true, timestamp: new Date().toISOString() }));
 
@@ -141,23 +172,23 @@ function buildApp() {
     return { ok: true, user: request.user };
   });
 
-  /* ── List users (admin only) ── */
+  /* ── List users ── */
   app.get('/api/usuarios', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate],
   }, async () => {
     return { ok: true, usuarios: listUsers() };
   });
 
-  /* ── Create user (admin only) ── */
+  /* ── Create user ── */
   app.post('/api/usuarios', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('users.create')],
   }, async (request, reply) => {
-    const { Usuario, Password, IdRol, NombreCompleto } = request.body || {};
+    const { Usuario, Password, IdRol, NombreCompleto, IdMesa } = request.body || {};
     if (!Usuario || !Password) {
       return reply.code(400).send({ error: 'Usuario y contraseña son requeridos' });
     }
 
-    const result = createUser({ Usuario, Password, IdRol, NombreCompleto });
+    const result = createUser({ Usuario, Password, IdRol, NombreCompleto, IdMesa });
     if (!result.ok) {
       return reply.code(409).send({ error: result.error });
     }
@@ -165,9 +196,9 @@ function buildApp() {
     return { ok: true, IdUsuario: result.IdUsuario };
   });
 
-  /* ── Update user (admin only) ── */
+  /* ── Update user ── */
   app.put('/api/usuarios/:id', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('users.edit')],
   }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!id) {
@@ -190,19 +221,19 @@ function buildApp() {
   });
 
   app.get('/api/permissions', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('roles.permissions')],
   }, async () => {
     return { ok: true, permissions: listPermissions() };
   });
 
   app.get('/api/roles-with-permissions', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('roles.permissions')],
   }, async () => {
     return { ok: true, roles: listRolesWithPermissions() };
   });
 
   app.post('/api/roles', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('roles.create')],
   }, async (request, reply) => {
     const result = createRole(request.body || {});
     if (!result.ok) {
@@ -212,7 +243,7 @@ function buildApp() {
   });
 
   app.put('/api/roles/:id', {
-    preHandler: [app.authenticate, app.requireAdmin],
+    preHandler: [app.authenticate, app.requirePermission('roles.edit')],
   }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!id) {
@@ -275,6 +306,93 @@ function buildApp() {
     preHandler: [app.authenticate],
   }, async (request) => {
     return { ok: true, rows: replaceDiasInhabiles(Array.isArray(request.body) ? request.body : []) };
+  });
+
+  // Mesas de trámite
+  app.get('/api/mesas', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.view')],
+  }, async () => {
+    return { ok: true, mesas: listMesas() };
+  });
+
+  app.get('/api/mesas/activas', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, mesas: listMesasActivas() };
+  });
+
+  app.post('/api/mesas', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+  }, async (request) => {
+    return createMesa(request.body || {});
+  });
+
+  app.put('/api/mesas/:id', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+  }, async (request) => {
+    return updateMesa(Number(request.params.id), request.body || {});
+  });
+
+  app.post('/api/mesas/import-catalog', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.import')],
+  }, async (request) => {
+    return importMesasCatalog(Array.isArray(request.body) ? request.body : []);
+  });
+
+  app.post('/api/mesas/import-assignments', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.import')],
+  }, async (request) => {
+    return importMesaAssignments(Array.isArray(request.body) ? request.body : []);
+  });
+
+  app.post('/api/mesas/auto-assign', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.auto_assign')],
+  }, async (request) => {
+    const { userId, userName } = request.body || {};
+    return autoAssignMesas(userId, userName);
+  });
+
+  app.post('/api/mesas/reassign', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.reassign')],
+  }, async (request) => {
+    return reassignMesa(request.body || {});
+  });
+
+  app.post('/api/mesas/assignment-history', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.history')],
+  }, async (request) => {
+    return { ok: true, history: getAssignmentHistory(request.body || {}) };
+  });
+
+  // Trabajo diario
+  app.post('/api/trabajo/capture', {
+    preHandler: [app.authenticate, app.requirePermission('trabajo.capture')],
+  }, async (request) => {
+    return captureTrabajoDiario(request.body || {});
+  });
+
+  app.get('/api/trabajo/expedientes-mesa/:mesaId', {
+    preHandler: [app.authenticate, app.requirePermission('trabajo.view_my_mesa')],
+  }, async (request) => {
+    return { ok: true, rows: getExpedientesByMesa(request.params.mesaId) };
+  });
+
+  app.get('/api/trabajo/expedientes-all', {
+    preHandler: [app.authenticate, app.requirePermission('trabajo.view_all_mesas')],
+  }, async () => {
+    return { ok: true, rows: getExpedientesAllMesas() };
+  });
+
+  app.post('/api/trabajo/history', {
+    preHandler: [app.authenticate, app.requirePermission('trabajo.history')],
+  }, async (request) => {
+    return { ok: true, history: getHistorialTrabajoDiario(request.body || {}) };
+  });
+
+  app.post('/api/trabajo/flush', {
+    preHandler: [app.authenticate, app.requirePermission('trabajo.flush_history')],
+  }, async () => {
+    return flushTrabajoDiarioToHistory();
   });
 
   return app;

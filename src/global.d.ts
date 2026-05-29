@@ -13,6 +13,7 @@ declare global {
       ) => Promise<{ rows: any[]; summary: any }>;
       list: () => Promise<any[]>;
       patch: (id: string, patch: Record<string, any>) => Promise<any>;
+      delete: (id: string) => Promise<boolean>;
       recalculate: () => Promise<any[]>;
       updateFromSentencias: (
         rows: any[],
@@ -140,6 +141,19 @@ declare global {
           Permisos?: string[];
         },
       ) => Promise<{ ok: boolean; error?: string }>;
+
+      // Mesas de tramite & Trabajo diario
+      listMesas: () => Promise<any[]>;
+      listMesasActivas: () => Promise<any[]>;
+      createMesa: (data: any) => Promise<{ ok: boolean; error?: string }>;
+      updateMesa: (id: any, data: any) => Promise<{ ok: boolean; error?: string }>;
+      deleteMesa: (id: any) => Promise<{ ok: boolean; error?: string }>;
+      importMesasCatalog: (rows: any[]) => Promise<any>;
+      importMesaAssignments: (rows: any[]) => Promise<any>;
+      autoAssignMesas: (userId: any, userName: any) => Promise<any>;
+      reassignMesa: (data: any) => Promise<any>;
+      getAssignmentHistory: (filters: any) => Promise<any>;
+      getExpedientesAllMesas: () => Promise<any>;
     };
   }
 

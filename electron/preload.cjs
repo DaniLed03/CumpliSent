@@ -34,6 +34,7 @@ const localCumplimientosBackend = {
   importRows: (rows) => ipcRenderer.invoke('cumplimientos:import-rows', rows),
   list: () => ipcRenderer.invoke('cumplimientos:list'),
   patch: (id, patch) => ipcRenderer.invoke('cumplimientos:patch', id, patch),
+  delete: (id) => ipcRenderer.invoke('cumplimientos:delete', id),
   recalculate: () => ipcRenderer.invoke('cumplimientos:recalculate'),
   updateFromSentencias: (rows) => ipcRenderer.invoke('cumplimientos:update-from-sentencias', rows),
   listInhabiles: () => ipcRenderer.invoke('inhabiles:list'),
@@ -55,6 +56,12 @@ const remoteCumplimientosBackend = {
     method: 'PATCH',
     body: JSON.stringify(patch),
   })).row,
+  delete: async (id) => {
+    await remoteRequest(`/api/cumplimientos/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    return true;
+  },
   recalculate: async () => (await remoteRequest('/api/cumplimientos/recalculate', {
     method: 'POST',
     body: JSON.stringify({}),
@@ -92,6 +99,7 @@ contextBridge.exposeInMainWorld('cumplimientosBackend', {
   importRows: (...args) => getCumplimientosBackend().importRows(...args),
   list: (...args) => getCumplimientosBackend().list(...args),
   patch: (...args) => getCumplimientosBackend().patch(...args),
+  delete: (...args) => getCumplimientosBackend().delete(...args),
   recalculate: (...args) => getCumplimientosBackend().recalculate(...args),
   updateFromSentencias: (...args) => getCumplimientosBackend().updateFromSentencias(...args),
   listInhabiles: (...args) => getCumplimientosBackend().listInhabiles(...args),
@@ -228,4 +236,53 @@ contextBridge.exposeInMainWorld('api', {
   updateRole: async (id, roleData) => remoteSession
     ? await remoteRequest(`/api/roles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(roleData) })
     : ipcRenderer.invoke('roles:update', id, roleData),
+
+  // Mesas de trámite
+  listMesas: async () => remoteSession
+    ? (await remoteRequest('/api/mesas')).mesas
+    : ipcRenderer.invoke('mesas:list'),
+  listMesasActivas: async () => remoteSession
+    ? (await remoteRequest('/api/mesas/activas')).mesas
+    : ipcRenderer.invoke('mesas:list-active'),
+  createMesa: async (data) => remoteSession
+    ? await remoteRequest('/api/mesas', { method: 'POST', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('mesas:create', data),
+  updateMesa: async (id, data) => remoteSession
+    ? await remoteRequest(`/api/mesas/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('mesas:update', id, data),
+  deleteMesa: async (id) => remoteSession
+    ? await remoteRequest(`/api/mesas/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    : ipcRenderer.invoke('mesas:delete', id),
+  importMesasCatalog: async (rows) => remoteSession
+    ? await remoteRequest('/api/mesas/import-catalog', { method: 'POST', body: JSON.stringify(rows) })
+    : ipcRenderer.invoke('mesas:import-catalog', rows),
+  importMesaAssignments: async (rows) => remoteSession
+    ? await remoteRequest('/api/mesas/import-assignments', { method: 'POST', body: JSON.stringify(rows) })
+    : ipcRenderer.invoke('mesas:import-assignments', rows),
+  autoAssignMesas: async (userId, userName) => remoteSession
+    ? await remoteRequest('/api/mesas/auto-assign', { method: 'POST', body: JSON.stringify({ userId, userName }) })
+    : ipcRenderer.invoke('mesas:auto-assign', userId, userName),
+  reassignMesa: async (data) => remoteSession
+    ? await remoteRequest('/api/mesas/reassign', { method: 'POST', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('mesas:reassign', data),
+  getAssignmentHistory: async (filters) => remoteSession
+    ? (await remoteRequest('/api/mesas/assignment-history', { method: 'POST', body: JSON.stringify(filters) })).history
+    : ipcRenderer.invoke('mesas:assignment-history', filters),
+
+  // Trabajo diario
+  captureTrabajoDiario: async (data) => remoteSession
+    ? await remoteRequest('/api/trabajo/capture', { method: 'POST', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('trabajo:capture', data),
+  getExpedientesByMesa: async (mesaId) => remoteSession
+    ? (await remoteRequest(`/api/trabajo/expedientes-mesa/${encodeURIComponent(mesaId)}`)).rows
+    : ipcRenderer.invoke('trabajo:expedientes-mesa', mesaId),
+  getExpedientesAllMesas: async () => remoteSession
+    ? (await remoteRequest('/api/trabajo/expedientes-all')).rows
+    : ipcRenderer.invoke('trabajo:expedientes-all'),
+  getHistorialTrabajoDiario: async (filters) => remoteSession
+    ? (await remoteRequest('/api/trabajo/history', { method: 'POST', body: JSON.stringify(filters) })).history
+    : ipcRenderer.invoke('trabajo:history', filters),
+  flushTrabajoDiarioToHistory: async () => remoteSession
+    ? await remoteRequest('/api/trabajo/flush', { method: 'POST' })
+    : ipcRenderer.invoke('trabajo:flush'),
 });

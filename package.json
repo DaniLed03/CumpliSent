@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "5.1.0",
+  "version": "7.1.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -58,9 +58,11 @@
     "lucide-react": "0.487.0",
     "motion": "12.23.24",
     "next-themes": "0.4.6",
+    "react": "18.3.1",
     "react-day-picker": "8.10.1",
     "react-dnd": "16.0.1",
     "react-dnd-html5-backend": "16.0.1",
+    "react-dom": "18.3.1",
     "react-hook-form": "7.55.0",
     "react-popper": "2.3.0",
     "react-resizable-panels": "2.1.7",
@@ -78,6 +80,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "4.7.0",
     "electron": "^36.2.0",
     "electron-builder": "^26.8.1",
@@ -97,17 +100,12 @@
       "optional": true
     }
   },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.3.5"
-    }
-  },
   "author": "CumpliSent Team",
   "description": "Sistema de Control de Cumplimiento de Sentencias",
   "build": {
     "appId": "mx.intranet.cumplisent",
     "productName": "CumpliSent",
-    "artifactName": "CumpliSentInstallerV5.1.${ext}",
+    "artifactName": "CumpliSentInstallerv7.1.${ext}",
     "directories": {
       "output": "release"
     },
@@ -131,6 +129,11 @@
       "shortcutName": "CumpliSent",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    }
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "6.3.5"
     }
   }
 }

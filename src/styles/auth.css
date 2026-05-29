@@ -108,6 +108,133 @@
   filter: drop-shadow(0 18px 32px rgba(12, 35, 64, 0.18));
 }
 
+.license-loader-card {
+  position: relative;
+  z-index: 1;
+  width: min(700px, calc(100vw - 48px));
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3.25rem 2rem;
+  border-radius: 1.75rem;
+  background: rgba(30, 48, 75, 0.86);
+  -webkit-backdrop-filter: blur(9px) saturate(82%);
+  backdrop-filter: blur(9px) saturate(82%);
+  box-shadow: 0 30px 76px -30px rgba(15, 23, 42, 0.48);
+  text-align: center;
+}
+
+.license-loader-logo {
+  width: 118px;
+  height: 118px;
+  object-fit: contain;
+  margin-bottom: 2.5rem;
+  filter: drop-shadow(0 18px 34px rgba(8, 22, 42, 0.28));
+}
+
+.license-loader-status {
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2.1rem;
+}
+
+.license-loader-spinner {
+  width: 92px;
+  height: 92px;
+  border: 10px solid rgba(96, 165, 250, 0.22);
+  border-top-color: #60a5fa;
+  border-right-color: #60a5fa;
+  border-radius: 9999px;
+  animation: auth-loader-spin 1s linear infinite;
+}
+
+.license-loader-state-icon {
+  width: 92px;
+  height: 92px;
+  stroke-width: 2.5;
+}
+
+.license-loader-status-valid {
+  color: #22c55e;
+  filter: drop-shadow(0 18px 30px rgba(34, 197, 94, 0.28));
+}
+
+.license-loader-status-invalid {
+  color: #ef4444;
+  filter: drop-shadow(0 18px 30px rgba(239, 68, 68, 0.24));
+}
+
+.license-loader-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.license-loader-title span {
+  color: #ffffff;
+}
+
+.license-loader-title strong {
+  color: #0066ff;
+  font-weight: 900;
+}
+
+.license-loader-text {
+  margin: 1.15rem 0 0;
+  color: #aeb9c9;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .license-loader-card {
+    min-height: min(460px, calc(100vh - 48px));
+    padding: 2.5rem 1.5rem;
+    border-radius: 1.5rem;
+  }
+
+  .license-loader-logo {
+    width: 96px;
+    height: 96px;
+    margin-bottom: 2rem;
+  }
+
+  .license-loader-status,
+  .license-loader-spinner,
+  .license-loader-state-icon {
+    width: 76px;
+    height: 76px;
+  }
+
+  .license-loader-status {
+    margin-bottom: 1.8rem;
+  }
+
+  .license-loader-spinner {
+    border-width: 8px;
+  }
+
+  .license-loader-title {
+    font-size: 2.45rem;
+  }
+
+  .license-loader-text {
+    font-size: 1rem;
+  }
+}
+
+@keyframes auth-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes auth-dvd-x {
   from { transform: translateX(28px); }
   to { transform: translateX(calc(100vw - 178px)); }

@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import logoImg from "../assets/Cumplisent.png";
 import {
   Calendar,
@@ -17,12 +18,18 @@ import {
   Upload,
   Users,
   X,
+  Clock,
+  ClipboardList,
+  TableProperties,
+  Trash2
 } from "lucide-react";
 import CumplimientosExcel from "./components/CumplimientosExcel";
 import LoginScreen from "./components/LoginScreen";
 import ServerConfig from "./components/ServerConfig";
 import UserManagement from "./components/UserManagement";
 import RolePermissions from "./components/RolePermissions";
+import MesasTramite from "./components/MesasTramite";
+import TrabajoDiario from "./components/TrabajoDiario";
 import { confirmAlert, showStyledAlert } from "./utils/alert";
 import { toastError, toastSuccess, toastWarning } from "./utils/toast";
 
@@ -51,7 +58,9 @@ type ViewKey =
   | "dias-inhabiles"
   | "servidor"
   | "usuarios"
-  | "roles";
+  | "roles"
+  | "mesas"
+  | "trabajo-diario";
 
 const VIEW_TITLES: Record<ViewKey, string> = {
   dashboard: "Dashboard",
@@ -61,6 +70,8 @@ const VIEW_TITLES: Record<ViewKey, string> = {
   servidor: "Servidor",
   usuarios: "Usuarios",
   roles: "Roles y permisos",
+  mesas: "Mesas de trámite",
+  "trabajo-diario": "Trabajo diario",
 };
 
 const VIEW_PERMISSIONS: Record<ViewKey, string> = {
@@ -71,6 +82,8 @@ const VIEW_PERMISSIONS: Record<ViewKey, string> = {
   servidor: "view.servidor",
   usuarios: "view.usuarios",
   roles: "view.roles",
+  mesas: "mesas.view",
+  "trabajo-diario": "trabajo.view_my_mesa",
 };
 
 function getBackend() {
@@ -632,7 +645,7 @@ function DiasInhabilesView({
   const [importError, setImportError] = useState("");
   const [diaEditando, setDiaEditando] = useState<DiaInhabil | null>(null);
   const [fechaEditando, setFechaEditando] = useState("");
-  const [showImportHelp, setShowImportHelp] = useState(false);
+  const [diaToDelete, setDiaToDelete] = useState<DiaInhabil | null>(null);
 
   const persistDias = (dias: DiaInhabil[]) => {
     const ordered = [...dias].sort((a, b) =>
@@ -674,16 +687,15 @@ function DiasInhabilesView({
     setNuevaFecha("");
   };
 
-  const handleEliminar = async (dia: DiaInhabil) => {
-    const confirmed = await confirmAlert({
-      title: "Eliminar día inhábil",
-      text: `Se eliminara ${formatDate(dia.fecha)} del calendario.`,
-      confirmText: "Si, eliminar",
-      cancelText: "Cancelar",
-      icon: "warning",
-    });
-    if (confirmed)
-      persistDias(diasInhabiles.filter((item) => item.id !== dia.id));
+  const handleEliminar = (dia: DiaInhabil) => {
+    setDiaToDelete(dia);
+  };
+
+  const confirmDeleteDia = () => {
+    if (diaToDelete) {
+      persistDias(diasInhabiles.filter((item) => item.id !== diaToDelete.id));
+      setDiaToDelete(null);
+    }
   };
 
   const handleGuardarEdicion = () => {
@@ -852,17 +864,13 @@ function DiasInhabilesView({
             </div>
           </div>
 
-          <div className="bg-card rounded-lg border border-border p-4 min-w-0 relative">
-            <button
-              type="button"
-              onClick={() => setShowImportHelp(true)}
-              className="absolute right-4 top-4 h-7 w-7 flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
-              title="Ver instrucción"
-              aria-label="Ver instrucción para importar desde Excel"
-            >
-              <CircleHelp className="w-4 h-4" />
-            </button>
-            <h3 className="font-semibold mb-3 pr-10">Importar desde Excel</h3>
+          <div className="bg-card rounded-lg border border-border p-4 min-w-0">
+            <div className="mb-3 space-y-1">
+              <h3 className="font-semibold text-xs text-slate-800">Importar desde Excel</h3>
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 text-[9px] px-2 py-1 rounded inline-block">
+                El sistema buscará automáticamente la columna "DÍAS INHÁBILES" en el archivo Excel y procesará las fechas encontradas.
+              </div>
+            </div>
             <div className="space-y-3">
               <div className="flex items-center gap-4">
                 <label className="cursor-pointer flex-1 min-w-0">
@@ -903,38 +911,6 @@ function DiasInhabilesView({
         </div>
       )}
 
-      {showImportHelp && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-card rounded-lg shadow-2xl border border-border overflow-hidden">
-            <div className="px-4 py-3 bg-blue-600 text-white flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Instrucción</h3>
-              <button
-                type="button"
-                onClick={() => setShowImportHelp(false)}
-                className="p-1 hover:bg-white/15 rounded transition-colors"
-                aria-label="Cerrar instrucción"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-foreground leading-relaxed">
-                El sistema buscará automáticamente la columna "DÍAS INHÁBILES"
-                en el archivo Excel y procesará las fechas encontradas.
-              </p>
-              <div className="flex justify-end mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowImportHelp(false)}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
-                >
-                  Entendido
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div
         className="bg-card rounded-lg border border-border p-4 md:col-span-2 flex-1 min-h-0 flex flex-col"
@@ -982,7 +958,7 @@ function DiasInhabilesView({
                           className="p-1.5 hover:bg-destructive/10 text-destructive rounded transition-colors"
                           title="Eliminar"
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -1039,6 +1015,37 @@ function DiasInhabilesView({
           </div>
         </div>
       )}
+
+      {/* MODAL ELIMINAR DIA INHABIL */}
+      {diaToDelete && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                ¿Eliminar día inhábil {formatDate(diaToDelete.fecha)}?
+              </h3>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setDiaToDelete(null)}
+                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteDia}
+                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1048,6 +1055,7 @@ export default function App() {
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [diasInhabiles, setDiasInhabiles] = useState<DiaInhabil[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [currentNow, setCurrentNow] = useState(() => new Date());
   const [session, setSession] = useState<{
     user: SessionUser;
     token?: string;
@@ -1058,6 +1066,18 @@ export default function App() {
   const permissions = session?.user?.Permisos || [];
   const can = (permission: string) =>
     isAdmin || permissions.includes(permission);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const canView = (view: ViewKey) => {
+    if (view === "trabajo-diario") {
+      return can("trabajo.view_my_mesa") || can("trabajo.view_all_mesas");
+    }
+    return can(VIEW_PERMISSIONS[view]);
+  };
 
   useEffect(() => {
     if (!session) return;
@@ -1074,10 +1094,10 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    if (!can(VIEW_PERMISSIONS[currentView])) {
+    if (!canView(currentView)) {
       const fallback =
         (Object.keys(VIEW_PERMISSIONS) as ViewKey[]).find((view) =>
-          can(VIEW_PERMISSIONS[view]),
+          canView(view),
         ) || "dashboard";
       setCurrentView(fallback);
     }
@@ -1091,33 +1111,51 @@ export default function App() {
     );
   }
 
-  const navItems: Array<{ view: ViewKey; icon: React.ReactNode }> = [
+  const mainNavItems: Array<{ view: ViewKey; icon: React.ReactNode }> = [
     { view: "dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { view: "cumplimientos", icon: <FileText className="w-4 h-4" /> },
     { view: "procesar", icon: <Upload className="w-4 h-4" /> },
     { view: "dias-inhabiles", icon: <Calendar className="w-4 h-4" /> },
+    { view: "mesas", icon: <TableProperties className="w-4 h-4" /> },
+    { view: "trabajo-diario", icon: <ClipboardList className="w-4 h-4" /> },
+  ];
+  const adminNavItems: Array<{ view: ViewKey; icon: React.ReactNode }> = [
     { view: "servidor", icon: <Server className="w-4 h-4" /> },
     { view: "usuarios", icon: <Users className="w-4 h-4" /> },
     { view: "roles", icon: <Shield className="w-4 h-4" /> },
   ];
+  const navItems = [...mainNavItems, ...adminNavItems];
+  const hasAdminNavItems = adminNavItems.some((item) => canView(item.view));
+  const activeViewIcon = navItems.find((item) => item.view === currentView)?.icon;
+  const headerDate = currentNow.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const headerTime = currentNow.toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <aside
-        className={`${sidebarOpen ? "w-56 lg:w-64" : "w-14"} bg-card border-r border-border transition-all duration-300 flex flex-col`}
+        className={`${sidebarOpen ? "w-72 lg:w-80" : "w-14"} bg-card border-r border-border transition-all duration-300 flex flex-col`}
       >
         <div className="p-3 border-b border-border flex items-center justify-between">
           {sidebarOpen && (
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
               <img
                 src={logoImg}
                 className="w-9 h-9 object-contain"
                 alt="CumpliSent logo"
               />
-              <h1 className="text-xl font-black tracking-tight truncate">
+              <h1 className="text-xl font-black tracking-normal whitespace-nowrap">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
-                <span className="ml-1 text-black">v5.0</span>
+                <span className="ml-1 text-black">v7.1</span>
               </h1>
             </div>
           )}
@@ -1134,9 +1172,9 @@ export default function App() {
         </div>
 
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {navItems.map(
+          {mainNavItems.map(
             (item) =>
-              can(VIEW_PERMISSIONS[item.view]) && (
+              canView(item.view) && (
                 <NavItem
                   key={item.view}
                   icon={item.icon}
@@ -1146,6 +1184,30 @@ export default function App() {
                   onClick={() => setCurrentView(item.view)}
                 />
               ),
+          )}
+          {hasAdminNavItems && (
+            <>
+              {sidebarOpen && (
+                <div className="pt-2 mt-2 border-t border-border">
+                  <p className="px-2.5 py-1 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Administración
+                  </p>
+                </div>
+              )}
+              {adminNavItems.map(
+                (item) =>
+                  canView(item.view) && (
+                    <NavItem
+                      key={item.view}
+                      icon={item.icon}
+                      label={VIEW_TITLES[item.view]}
+                      active={currentView === item.view}
+                      collapsed={!sidebarOpen}
+                      onClick={() => setCurrentView(item.view)}
+                    />
+                  ),
+              )}
+            </>
           )}
         </nav>
 
@@ -1175,17 +1237,30 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 min-w-0 flex flex-col uppercase">
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4">
           <div className="min-w-0">
-            <h2 className="font-bold truncate">{VIEW_TITLES[currentView]}</h2>
+            <h2 className="flex items-center gap-2 font-black truncate">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                {activeViewIcon}
+              </span>
+              <span className="truncate">{VIEW_TITLES[currentView]}</span>
+            </h2>
             <p className="text-[11px] text-muted-foreground truncate">
-              Sistema de Control de Cumplimiento
+              {currentView === "cumplimientos"
+                ? "Control de seguimiento de cumplimiento de sentencias de amparo"
+                : "Sistema de Control de Cumplimiento"}
             </p>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground">
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-            Sesión activa
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-700">
+              <Calendar className="h-3.5 w-3.5" />
+              {headerDate}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-bold text-blue-700">
+              <Clock className="h-3.5 w-3.5" />
+              {headerTime}
+            </span>
           </div>
         </header>
 
@@ -1209,14 +1284,24 @@ export default function App() {
           )}
           {currentView === "servidor" && <ServerConfig canManage={isAdmin} />}
           {currentView === "usuarios" && (
-            <UserManagement canCreate={isAdmin} canEdit={isAdmin} />
+            <UserManagement
+              canCreate={can("users.create")}
+              canEdit={can("users.edit")}
+              canAssignMesa={can("mesas.assign_users")}
+            />
           )}
           {currentView === "roles" && (
             <RolePermissions
-              canCreate={isAdmin}
-              canEdit={isAdmin}
-              canAssignPermissions={isAdmin}
+              canCreate={can("roles.create")}
+              canEdit={can("roles.edit")}
+              canAssignPermissions={can("roles.permissions")}
             />
+          )}
+          {currentView === "mesas" && (
+            <MesasTramite permissions={permissions} isAdmin={isAdmin} session={session} />
+          )}
+          {currentView === "trabajo-diario" && (
+            <TrabajoDiario permissions={permissions} isAdmin={isAdmin} session={session} />
           )}
         </section>
       </main>
