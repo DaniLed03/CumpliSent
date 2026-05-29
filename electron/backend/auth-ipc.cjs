@@ -11,7 +11,9 @@ const {
   listRolesWithPermissions,
   listUsers,
   updateRole,
+  deleteRole,
   updateUser,
+  deleteUser,
   verifyRememberSession,
 } = require('./auth-store.cjs');
 const {
@@ -197,6 +199,10 @@ function registerAuthHandlers() {
     return updateUser(id, userData);
   });
 
+  ipcMain.handle('users:delete', async (_event, id) => {
+    return deleteUser(id);
+  });
+
   ipcMain.handle('roles:list', async () => {
     return listRoles();
   });
@@ -215,6 +221,10 @@ function registerAuthHandlers() {
 
   ipcMain.handle('roles:update', async (_event, id, roleData) => {
     return updateRole(Number(id), roleData || {});
+  });
+
+  ipcMain.handle('roles:delete', async (_event, id) => {
+    return deleteRole(Number(id));
   });
 
   registered = true;

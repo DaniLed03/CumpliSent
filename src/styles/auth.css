@@ -771,6 +771,14 @@
   background: #ffffff;
 }
 
+.user-modal-v2 {
+  background: #ffffff;
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+  animation: slideUp 0.2s ease-out;
+  overflow: hidden;
+}
+
 /* ═══════════════════════════════════════════
  * USER HEADER BAR (app header)
  * ═══════════════════════════════════════════ */

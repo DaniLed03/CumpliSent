@@ -44,7 +44,6 @@ const DEFAULT_ROLES = [
 ];
 
 const SYSTEM_PERMISSIONS = [
-  { IdPermiso: 'view.dashboard', NombrePermiso: 'Dashboard', Categoria: 'VISTAS' },
   { IdPermiso: 'view.cumplimientos', NombrePermiso: 'Cumplimientos', Categoria: 'VISTAS' },
   { IdPermiso: 'view.procesar', NombrePermiso: 'Procesar Excel', Categoria: 'VISTAS' },
   { IdPermiso: 'view.dias_inhabiles', NombrePermiso: 'Dias inhabiles', Categoria: 'VISTAS' },
@@ -85,7 +84,6 @@ const SYSTEM_PERMISSIONS = [
 const DEFAULT_ROLE_PERMISSIONS = {
   1: SYSTEM_PERMISSIONS.map((p) => p.IdPermiso),
   2: [
-    'view.dashboard',
     'view.cumplimientos',
     'view.procesar',
     'view.dias_inhabiles',
@@ -100,7 +98,6 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'trabajo.history',
   ],
   3: [
-    'view.dashboard',
     'view.cumplimientos',
     'view.procesar',
     'cumplimientos.add',
@@ -113,7 +110,6 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'trabajo.history',
   ],
   4: [
-    'view.dashboard',
     'view.cumplimientos',
     'cumplimientos.edit',
     'cumplimientos.export',
@@ -217,6 +213,7 @@ function seedPermissions(database) {
     'trabajo.view_all',
     'trabajo.view_mine',
     'trabajo.view_own_mesa',
+    'view.dashboard',
   ];
 
   for (const permissionId of legacyMesasPermissions) {
@@ -539,6 +536,21 @@ function updateUser(IdUsuario, { IdRol, Activo, NombreCompleto, Password, IdMesa
   return { ok: true };
 }
 
+function deleteUser(IdUsuario) {
+  const database = getDb();
+  
+  const user = database.prepare('SELECT "Usuario", "IdRol" FROM "USUARIOS" WHERE "IdUsuario" = ?').get(IdUsuario);
+  if (!user) {
+    return { ok: false, error: 'Usuario no encontrado' };
+  }
+  if (user.Usuario.toLowerCase() === 'jledezmar' || user.Usuario.toLowerCase() === 'admin') {
+    return { ok: false, error: 'No se puede eliminar al administrador principal del sistema' };
+  }
+
+  database.prepare('DELETE FROM "USUARIOS" WHERE "IdUsuario" = ?').run(IdUsuario);
+  return { ok: true };
+}
+
 function listRoles() {
   return getDb().prepare('SELECT "IdRol", "NombreRol" FROM "CAT_ROLES" ORDER BY "IdRol" ASC').all();
 }
@@ -561,7 +573,6 @@ function listPermissions() {
         ELSE 99
       END,
       CASE "IdPermiso"
-        WHEN 'view.dashboard' THEN 1
         WHEN 'view.cumplimientos' THEN 2
         WHEN 'view.procesar' THEN 3
         WHEN 'view.dias_inhabiles' THEN 4
@@ -674,6 +685,20 @@ function setRolePermissions(IdRol, Permisos) {
   }
 }
 
+function deleteRole(IdRol) {
+  const database = getDb();
+  if (Number(IdRol) === 1) {
+    return { ok: false, error: 'No se puede eliminar el rol ADMINISTRADOR principal' };
+  }
+  const usersWithRole = database.prepare('SELECT COUNT(*) AS cnt FROM "USUARIOS" WHERE "IdRol" = ?').get(IdRol);
+  if (usersWithRole.cnt > 0) {
+    return { ok: false, error: 'No se puede eliminar el rol porque tiene usuarios asignados' };
+  }
+  database.prepare('DELETE FROM "ROL_PERMISOS" WHERE "IdRol" = ?').run(IdRol);
+  database.prepare('DELETE FROM "CAT_ROLES" WHERE "IdRol" = ?').run(IdRol);
+  return { ok: true };
+}
+
 /* ────────────────────────────────────────────
  * Exports
  * ──────────────────────────────────────────── */
@@ -694,7 +719,9 @@ module.exports = {
   listUsers,
   normalizeRoleName,
   updateRole,
+  deleteRole,
   updateUser,
+  deleteUser,
   verifyRememberSession,
   verifyPassword,
 };

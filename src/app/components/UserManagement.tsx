@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Users,
+  User,
   UserPlus,
   Edit,
   Shield,
@@ -13,7 +14,16 @@ import {
   Loader2,
   AlertCircle,
   Search,
+  Trash2,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { showStyledAlert } from '../utils/alert';
 import { toastSuccess } from '../utils/toast';
 import { EditarUsuarioModal, NuevoUsuarioModal } from './modals/SystemModals';
@@ -34,6 +44,7 @@ export default function UserManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [deletingUser, setDeletingUser] = useState<UserRecord | null>(null);
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
@@ -106,7 +117,6 @@ export default function UserManagement({
 
     try {
       if (editingUser) {
-        // Update
         const updateData: any = {
           IdRol: formIdRol,
           Activo: formActivo,
@@ -130,7 +140,6 @@ export default function UserManagement({
           return;
         }
       } else {
-        // Create
         if (!formUsuario || !formPassword) {
           setFormError('Usuario y contraseña son requeridos');
           setFormLoading(false);
@@ -273,6 +282,34 @@ export default function UserManagement({
     }
   }
 
+  const handleDeleteUser = (user: UserRecord) => {
+    setDeletingUser(user);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deletingUser) return;
+    try {
+      const res = await window.api.deleteUser(deletingUser.IdUsuario);
+      if (!res.ok) {
+        showStyledAlert({
+          title: 'Error del sistema',
+          text: res.error || 'Error al eliminar usuario',
+          icon: 'error',
+        });
+        return;
+      }
+      setDeletingUser(null);
+      await loadData();
+      toastSuccess('Operación completada', 'El usuario fue eliminado correctamente.');
+    } catch (error: any) {
+      showStyledAlert({
+        title: 'Error del sistema',
+        text: error?.message || 'Error inesperado',
+        icon: 'error',
+      });
+    }
+  };
+
   const filteredUsers = users.filter(
     (u) =>
       u.Usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -340,7 +377,7 @@ export default function UserManagement({
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-muted/50 border-b border-border">
+            <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Usuario</th>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Nombre</th>
@@ -381,20 +418,29 @@ export default function UserManagement({
                   <td className="px-4 py-3 text-muted-foreground">{user.FechaCreacion || '—'}</td>
                   <td className="px-4 py-3 text-center">
                     {canEdit && (
-                      <button
-                        onClick={() => openEdit(user)}
-                        className="p-1.5 hover:bg-accent rounded-md transition-colors"
-                        title="Editar usuario"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="p-1.5 hover:bg-accent rounded-md transition-colors"
+                          title="Editar usuario"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors inline-flex"
+                          title="Eliminar usuario"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-xs">
                     No se encontraron usuarios
                   </td>
                 </tr>
@@ -406,148 +452,164 @@ export default function UserManagement({
 
       {/* Modal form */}
       {showForm && (
-        <div className="user-form-overlay" onClick={() => resetForm()}>
-          <div className="user-form-modal module-modal-shell" onClick={(e) => e.stopPropagation()}>
-            <div className="module-modal-header">
-              <h3 className="module-modal-title">
-                {editingUser ? 'Editar usuario' : 'Nuevo usuario'}
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={resetForm}>
+          <div
+            className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 500 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-200" />
+                {editingUser ? 'EDITAR USUARIO' : 'NUEVO USUARIO'}
               </h3>
-              <button onClick={resetForm} className="p-1 hover:bg-blue-700 rounded-md transition-colors">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit}>
-              <div className="module-modal-body space-y-4">
-              {/* Username */}
-              <div className="module-field">
-                <label className="module-label">Usuario</label>
-                <input
-                  type="text"
-                  value={formUsuario}
-                  onChange={(e) => setFormUsuario(e.target.value)}
-                  disabled={!!editingUser}
-                  className="module-input disabled:opacity-50"
-                  placeholder="nombre_usuario"
-                  required
-                />
-              </div>
-
-              {/* Full name */}
-              <div className="module-field">
-                <label className="module-label">Nombre Completo</label>
-                <input
-                  type="text"
-                  value={formNombre}
-                  onChange={(e) => setFormNombre(e.target.value)}
-                  className="module-input"
-                  placeholder="Nombre completo"
-                />
-              </div>
-
-              {/* Password */}
-              <div className="module-field">
-                <label className="module-label">
-                  {editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña'}
-                </label>
-                <div className="relative">
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-white">
+                {/* Usuario */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Usuario</label>
                   <input
-                    type={formShowPassword ? 'text' : 'password'}
-                    value={formPassword}
-                    onChange={(e) => setFormPassword(e.target.value)}
-                    className="module-input pr-9"
-                    placeholder={editingUser ? '••••••••' : 'Contraseña'}
-                    required={!editingUser}
+                    type="text"
+                    value={formUsuario}
+                    onChange={(e) => setFormUsuario(e.target.value)}
+                    disabled={!!editingUser}
+                    className="w-full h-11 px-4 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all disabled:opacity-50 disabled:bg-slate-50 shadow-sm"
+                    placeholder="nombre_usuario"
+                    required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setFormShowPassword(!formShowPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded transition-colors"
-                    tabIndex={-1}
-                  >
-                    {formShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
                 </div>
-              </div>
 
-              {/* Role */}
-              <div className="module-field">
-                <label className="module-label">Rol</label>
-                <select
-                  value={formIdRol}
-                  onChange={(e) => setFormIdRol(Number(e.target.value))}
-                  className="module-select"
-                >
-                  {roles.map((r) => (
-                    <option key={r.IdRol} value={r.IdRol}>
-                      {r.NombreRol}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Mesa selection */}
-              {canAssignMesa && (
-                <div className="module-field">
-                  <label className="module-label">Mesa Asignada</label>
-                  <select
-                    value={formIdMesa || ''}
-                    onChange={(e) => setFormIdMesa(e.target.value ? Number(e.target.value) : null)}
-                    className="module-select"
-                  >
-                    <option value="">Sin mesa asignada</option>
-                    {mesas.filter(m => m.ACTIVO === 1 || m.ID_MESA === formIdMesa).map((m) => (
-                      <option key={m.ID_MESA} value={m.ID_MESA}>
-                        {m.MESA} - {m.NOMBRE || 'Sin encargado'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Active */}
-              {editingUser && (
-                <div className="flex items-center gap-2">
+                {/* Nombre Completo */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre completo</label>
                   <input
-                    type="checkbox"
-                    id="form-activo"
-                    checked={formActivo}
-                    onChange={(e) => setFormActivo(e.target.checked)}
-                    className="w-4 h-4 rounded border-input"
+                    type="text"
+                    value={formNombre}
+                    onChange={(e) => setFormNombre(e.target.value)}
+                    className="w-full h-11 px-4 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
+                    placeholder="Nombre completo"
                   />
-                  <label htmlFor="form-activo" className="text-xs font-medium">
-                    Usuario activo
+                </div>
+
+                {/* Contraseña */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    {editingUser ? 'Nueva contraseña' : 'Contraseña'}
                   </label>
+                  {editingUser && (
+                    <p className="text-[10px] text-slate-400 -mt-1.5 mb-2 font-medium">Dejar vacío para no cambiar</p>
+                  )}
+                  <div className="relative">
+                    <input
+                      type={formShowPassword ? 'text' : 'password'}
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      className="w-full h-11 px-4 pr-10 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
+                      placeholder="••••••••"
+                      required={!editingUser}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormShowPassword(!formShowPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1e40af] transition-colors"
+                      tabIndex={-1}
+                    >
+                      {formShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              {/* Error */}
-              {formError && (
-                <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-100 rounded-lg text-red-700">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[10px]">{formError}</span>
+                {/* Rol + Mesa side-by-side */}
+                <div className={`grid gap-4 ${canAssignMesa ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Rol</label>
+                    <Select
+                      value={formIdRol.toString()}
+                      onValueChange={(val) => setFormIdRol(Number(val))}
+                    >
+                      <SelectTrigger className="w-full h-11 px-4 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:ring-[#1e40af]/20 focus:border-[#1e40af] focus:ring-4 transition-all shadow-sm">
+                        <SelectValue placeholder="Seleccione un rol" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((r) => (
+                          <SelectItem key={r.IdRol} value={r.IdRol.toString()}>
+                            {r.NombreRol}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {canAssignMesa && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Mesa</label>
+                      <Select
+                        value={formIdMesa ? formIdMesa.toString() : "none"}
+                        onValueChange={(val) => setFormIdMesa(val === "none" ? null : Number(val))}
+                      >
+                        <SelectTrigger className="w-full h-11 px-4 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:ring-[#1e40af]/20 focus:border-[#1e40af] focus:ring-4 transition-all shadow-sm">
+                          <SelectValue placeholder="Sin mesa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin mesa</SelectItem>
+                          {mesas.filter(m => m.ACTIVO === 1 || m.ID_MESA === formIdMesa).map((m) => (
+                            <SelectItem key={m.ID_MESA} value={m.ID_MESA.toString()}>
+                              {m.MESA} - {m.NOMBRE || 'Sin encargado'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Actions */}
+                {/* Activo toggle */}
+                {editingUser && (
+                  <label className="flex items-center gap-3 cursor-pointer select-none py-1 group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={formActivo}
+                        onChange={(e) => setFormActivo(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-slate-200 rounded-full peer-checked:bg-[#1e40af] transition-colors" />
+                      <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-5" />
+                    </div>
+                    <span className="text-[12px] font-bold text-slate-600 group-hover:text-slate-900 transition-colors uppercase tracking-wide">Usuario activo</span>
+                  </label>
+                )}
+
+                {/* Error */}
+                {formError && (
+                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-red-700 mt-4">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-[13px] font-medium">{formError}</span>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-5 py-2 bg-slate-100 text-slate-700 rounded-md text-sm font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#1e40af] text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
                 >
                   {formLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Save className="w-3.5 h-3.5" />
+                    <Save className="w-4 h-4" />
                   )}
                   {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
                 </button>
@@ -555,6 +617,37 @@ export default function UserManagement({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Modal */}
+      {deletingUser && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                ¿Eliminar usuario {deletingUser.Usuario}?
+              </h3>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setDeletingUser(null)}
+                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

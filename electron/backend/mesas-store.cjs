@@ -724,8 +724,7 @@ function getExpedientesByMesa(mesaId) {
   return list.filter(row => {
     if (Number(row.idMesa) !== Number(mesaId)) return false;
     const cumplimiento = String(row.fechaCumplimiento || '').trim();
-    const sinMateria = String(row.seDeclaroSinMateria || '').trim();
-    return !cumplimiento && !sinMateria;
+    return !cumplimiento;
   });
 }
 
@@ -734,8 +733,7 @@ function getExpedientesAllMesas() {
   const list = getCumplimientos();
   return list.filter(row => {
     const cumplimiento = String(row.fechaCumplimiento || '').trim();
-    const sinMateria = String(row.seDeclaroSinMateria || '').trim();
-    return !cumplimiento && !sinMateria;
+    return !cumplimiento;
   });
 }
 

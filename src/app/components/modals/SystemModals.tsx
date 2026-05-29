@@ -15,6 +15,7 @@ import {
   Shield,
   User,
   X,
+  Save,
 } from 'lucide-react';
 
 type SaveResult = void | boolean | Promise<void | boolean>;
@@ -393,7 +394,37 @@ export function NuevoRolModal({
 
   function toggle(permissionId: string) {
     if (!canAssignPermissions) return;
-    setSelected((current) => current.includes(permissionId) ? current.filter((id) => id !== permissionId) : [...current, permissionId]);
+    setSelected((current) => {
+      const isChecking = !current.includes(permissionId);
+      let next = isChecking 
+        ? [...current, permissionId]
+        : current.filter((id) => id !== permissionId);
+      
+      if (!isChecking) {
+        if (permissionId === 'view.cumplimientos') {
+          next = next.filter(id => !grouped['CUMPLIMIENTOS']?.find(p => p.IdPermiso === id));
+        } else if (permissionId === 'view.dias_inhabiles') {
+          next = next.filter(id => !grouped['DIAS INHABILES']?.find(p => p.IdPermiso === id));
+        } else if (permissionId === 'view.servidor') {
+          next = next.filter(id => !grouped['SERVIDOR']?.find(p => p.IdPermiso === id));
+        } else if (permissionId === 'view.usuarios') {
+          next = next.filter(id => !grouped['USUARIOS']?.find(p => p.IdPermiso === id));
+        } else if (permissionId === 'view.roles') {
+          next = next.filter(id => !grouped['ROLES Y PERMISOS']?.find(p => p.IdPermiso === id));
+        } else if (permissionId === 'mesas.view') {
+          next = next.filter(id => id === 'mesas.view' || !grouped['MESAS DE TRÁMITE']?.find(p => p.IdPermiso === id));
+        }
+        
+        if (permissionId === 'trabajo.view_my_mesa' || permissionId === 'trabajo.view_all_mesas') {
+          const hasMyMesa = next.includes('trabajo.view_my_mesa');
+          const hasAllMesas = next.includes('trabajo.view_all_mesas');
+          if (!hasMyMesa && !hasAllMesas) {
+            next = next.filter(id => id === 'trabajo.view_my_mesa' || id === 'trabajo.view_all_mesas' || !grouped['TRABAJO DIARIO']?.find(p => p.IdPermiso === id));
+          }
+        }
+      }
+      return next;
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -402,50 +433,113 @@ export function NuevoRolModal({
     if (result !== false) onClose();
   }
 
+  if (!isOpen) return null;
+
   return (
-    <ModalShell isOpen={isOpen} onClose={onClose} title={title} maxWidth="max-w-4xl">
-      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="mb-8">
-            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <Shield className="h-4 w-4 text-blue-600" />
-              Nombre del Rol
-            </label>
-            <input value={nombreRol} onChange={(e) => setNombreRol(e.target.value)} placeholder="NOMBRE DEL ROL" className="w-full rounded-xl border border-gray-300 px-4 py-3 uppercase outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500" required />
-          </div>
-          <div className="space-y-6">
-            {Object.entries(grouped).map(([category, items]) => (
-              <div key={category} className="overflow-hidden rounded-xl border border-gray-200">
-                <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-800">{category}</h3>
-                </div>
-                <div className="grid grid-cols-1 gap-2 p-4 md:grid-cols-3">
-                  {items.map((permission) => {
-                    const checked = selected.includes(permission.IdPermiso);
-                    return (
-                      <label key={permission.IdPermiso} className="group flex cursor-pointer items-center gap-3 rounded-lg p-3 transition-colors hover:bg-blue-50">
-                        <input type="checkbox" checked={checked} onChange={() => toggle(permission.IdPermiso)} disabled={!canAssignPermissions} className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500" />
-                        <span className="text-sm text-gray-700 group-hover:text-gray-900">{permission.NombrePermiso}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-6">
-            <ErrorBox error={error} />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 border-t border-gray-200 bg-gray-50 px-8 py-6">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-white">Cancelar</button>
-          <button type="submit" disabled={saving} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-3 font-medium text-white shadow-lg shadow-blue-500/30 transition-all hover:from-blue-700 hover:to-blue-800 disabled:opacity-60">
-            {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-            Guardar Permisos
+    <div className="fixed inset-0 z-[2147483000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 700 }}
+      >
+        <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+          <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+            <Shield className="w-4 h-4 text-blue-200" />
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 hover:bg-white/15 rounded-md transition-colors"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-      </form>
-    </ModalShell>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-blue-600" />
+                Nombre del Rol
+              </label>
+              <input
+                value={nombreRol}
+                onChange={(e) => setNombreRol(e.target.value)}
+                placeholder="NOMBRE DEL ROL"
+                className="w-full h-11 px-4 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all uppercase font-medium shadow-sm"
+                required
+              />
+            </div>
+
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([category, items]) => {
+                if (category === 'CUMPLIMIENTOS' && !selected.includes('view.cumplimientos')) return null;
+                if (category === 'DIAS INHABILES' && !selected.includes('view.dias_inhabiles')) return null;
+                if (category === 'SERVIDOR' && !selected.includes('view.servidor')) return null;
+                if (category === 'USUARIOS' && !selected.includes('view.usuarios')) return null;
+                if (category === 'ROLES Y PERMISOS' && !selected.includes('view.roles')) return null;
+                
+                let visibleItems = items;
+                if (category === 'MESAS DE TRÁMITE' && !selected.includes('mesas.view')) {
+                  visibleItems = items.filter(p => p.IdPermiso === 'mesas.view');
+                }
+                if (category === 'TRABAJO DIARIO' && !selected.includes('trabajo.view_my_mesa') && !selected.includes('trabajo.view_all_mesas')) {
+                  visibleItems = items.filter(p => p.IdPermiso === 'trabajo.view_my_mesa' || p.IdPermiso === 'trabajo.view_all_mesas');
+                }
+                if (visibleItems.length === 0) return null;
+
+                return (
+                  <div key={category} className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-sm">
+                    <div className="bg-slate-50/80 px-4 py-2.5 border-b border-slate-100">
+                      <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-widest">{category}</h4>
+                    </div>
+                    <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 bg-white">
+                      {visibleItems.map((permission) => {
+                        const checked = selected.includes(permission.IdPermiso);
+                        return (
+                          <label
+                            key={permission.IdPermiso}
+                            className="group flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-slate-50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggle(permission.IdPermiso)}
+                              disabled={!canAssignPermissions}
+                              className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-[#1e40af] focus:ring-[#1e40af]"
+                            />
+                            <span className="text-[12px] font-medium text-slate-600 group-hover:text-slate-900">{permission.NombrePermiso}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-red-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-[13px] font-medium">{error}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Guardar Permisos
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -565,57 +659,130 @@ export function ReasignarMesaModal({
 
   const currentMesa = selected ? mesas.find((mesa) => Number(mesa.ID_MESA) === Number(selected.idMesa)) : null;
 
+  if (!isOpen) return null;
+
   return (
-    <ModalShell isOpen={isOpen} onClose={onClose} title="Reasignar Mesa" subtitle="Busca un expediente y selecciona la nueva mesa de tramite" icon={<Edit className="h-6 w-6" />} maxWidth="max-w-4xl">
-      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
-            <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700"><Search className="h-4 w-4 text-blue-600" />Buscar Expediente (Juicio)</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-              <input value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setSelected(null); setNuevaMesa(''); }} placeholder="Escribe el No. de Juicio o Expediente..." className="w-full rounded-xl border border-gray-300 px-4 py-3 pl-11 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-blue-500" required />
-              {resultados.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
-                  {resultados.map((exp) => (
-                    <button key={exp.id} type="button" onClick={() => { setSelected(exp); setBusqueda(exp.numeroJuicio || ''); setNuevaMesa(exp.idMesa ? String(exp.idMesa) : ''); setObservaciones(exp.observacionesMesa || ''); }} className="flex w-full items-center justify-between gap-4 px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700">
-                      <span className="font-semibold">{exp.numeroJuicio}</span>
-                      <span className="text-xs text-gray-500">Orden {exp.numeroOrden || '-'}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-6">
-            <div className="mb-4 grid grid-cols-3 gap-4">
-              <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-900">Orden</p><p className="font-bold text-gray-900">{selected?.numeroOrden || '-'}</p></div>
-              <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-900">Juicio / Expediente</p><p className="font-bold text-blue-700">{selected?.numeroJuicio || '-'}</p></div>
-              <div><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-900">Mesa Actual</p><p className="font-bold text-gray-900">{currentMesa?.MESA || 'Sin mesa asignada'}</p></div>
-            </div>
-            {!selected && <p className="py-4 text-center text-sm text-blue-600">Busca un expediente para ver los resultados</p>}
-          </div>
-          <div className="mb-6 space-y-2">
-            <label className="block text-sm font-semibold text-gray-700">Seleccionar Nueva Mesa</label>
-            <select value={nuevaMesa} onChange={(e) => setNuevaMesa(e.target.value)} className="w-full cursor-pointer appearance-none rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500" required>
-              <option value="">Seleccione una mesa...</option>
-              {mesas.filter((mesa) => mesa.ACTIVO === 1 || Number(mesa.ID_MESA) === Number(selected?.idMesa)).map((mesa) => <option key={mesa.ID_MESA} value={mesa.ID_MESA}>{mesaLabel(mesa)}</option>)}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-700">Motivo u Observaciones</label>
-            <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Escribe el motivo del cambio..." rows={5} className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-blue-500" required />
-          </div>
-          <div className="mt-6"><ErrorBox error={error} /></div>
-        </div>
-        <div className="flex items-center gap-3 border-t border-gray-200 bg-gray-50 px-8 py-6">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-white">Cancelar</button>
-          <button type="submit" disabled={saving || !selected} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-3 font-medium text-white shadow-lg shadow-blue-500/30 transition-all hover:from-blue-700 hover:to-blue-800 disabled:opacity-60">
-            {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-            Guardar Reasignacion
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 640 }}
+      >
+        <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+          <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+            <Edit className="w-4 h-4 text-blue-200" />
+            Reasignar Mesa
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 hover:bg-white/15 rounded-md transition-colors"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
-      </form>
-    </ModalShell>
+
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+            
+            {/* Buscar Expediente */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Buscar Expediente (Juicio)</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <input 
+                  value={busqueda} 
+                  onChange={(e) => { setBusqueda(e.target.value); setSelected(null); setNuevaMesa(''); }} 
+                  placeholder="Escribe el No. de Juicio o Expediente..." 
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" 
+                  required 
+                />
+                {resultados.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                    {resultados.map((exp) => (
+                      <button 
+                        key={exp.id} 
+                        type="button" 
+                        onClick={() => { setSelected(exp); setBusqueda(exp.numeroJuicio || ''); setNuevaMesa(exp.idMesa ? String(exp.idMesa) : ''); setObservaciones(exp.observacionesMesa || ''); }} 
+                        className="flex w-full items-center justify-between gap-4 px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-blue-50 hover:text-[#1e40af]"
+                      >
+                        <span className="font-semibold">{exp.numeroJuicio}</span>
+                        <span className="text-xs text-slate-500">Orden {exp.numeroOrden || '-'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Static Info Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Orden</span>
+                  <span className="text-xs font-semibold text-slate-700">{selected?.numeroOrden || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Juicio/Exp</span>
+                  <span className="text-[13px] font-bold text-[#1e40af]">{selected?.numeroJuicio || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mesa Actual</span>
+                  <span className="text-xs font-semibold text-slate-700">{selected ? (currentMesa?.MESA || 'Sin mesa') : '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Nueva Mesa */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Seleccionar Nueva Mesa</label>
+              <div className="relative">
+                <select 
+                  value={nuevaMesa} 
+                  onChange={(e) => setNuevaMesa(e.target.value)} 
+                  className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" 
+                  required
+                >
+                  <option value="">Seleccione una mesa...</option>
+                  {mesas.filter((mesa) => mesa.ACTIVO === 1 || Number(mesa.ID_MESA) === Number(selected?.idMesa)).map((mesa) => <option key={mesa.ID_MESA} value={mesa.ID_MESA}>{mesaLabel(mesa)}</option>)}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Observaciones */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Motivo u Observaciones</label>
+              <textarea 
+                value={observaciones} 
+                onChange={(e) => setObservaciones(e.target.value)} 
+                placeholder="Escribe el motivo del cambio..." 
+                className="w-full resize-none rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm placeholder:text-slate-300" 
+                style={{ height: '100px' }}
+                required 
+              />
+            </div>
+
+            {error && (
+              <div className="mt-4"><ErrorBox error={error} /></div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+            <button
+              type="submit"
+              disabled={saving || !selected}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Guardar Reasignación
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -650,53 +817,107 @@ export function AgregarNuevosExpedientesPorRangoModal({
     await onSave({ archivo, fechaInicial, fechaFinal });
   }
 
+  if (!isOpen) return null;
+
   return (
-    <ModalShell isOpen={isOpen} onClose={onClose} title="Agregar Nuevos Expedientes por Rango" maxWidth="max-w-3xl">
-      <form onSubmit={handleSubmit} className="overflow-y-auto p-8">
-        <div className="mb-8 rounded-xl border border-blue-200 bg-blue-50 p-5">
-          <div className="flex gap-3">
-            <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
-            <p className="text-sm leading-relaxed text-blue-700"><strong>Instruccion:</strong> Seleccione un archivo Excel con expedientes y defina el rango de fechas de ejecutoria para filtrar los expedientes que desea agregar al listado cumplimientos.</p>
-          </div>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 640 }}
+      >
+        <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+          <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-blue-200" />
+            Agregar Nuevos Expedientes por Rango
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 hover:bg-white/15 rounded-md transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><FileSpreadsheet className="h-4 w-4 text-blue-600" />Archivo Sentencias</label>
-            <input id="modal-file-agregar" type="file" accept=".xlsx,.xls,.xlsm" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="hidden" required />
-            <label htmlFor="modal-file-agregar" className="group flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 px-6 py-8 transition-all hover:border-blue-500 hover:bg-blue-50">
-              <div className="flex flex-col items-center gap-2">
-                <div className="rounded-lg bg-gray-100 p-3 transition-colors group-hover:bg-blue-100"><FileSpreadsheet className="h-8 w-8 text-gray-500 transition-colors group-hover:text-blue-600" /></div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-900">{archivo ? archivo.name : 'Seleccionar Archivo Excel'}</p>
-                  <p className="mt-1 text-xs text-gray-500">{archivo ? `${(archivo.size / 1024).toFixed(2)} KB` : 'Haz clic para seleccionar un archivo .xlsx o .xls'}</p>
+
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+            
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+              <Info className="w-5 h-5 text-[#1e40af] shrink-0 mt-0.5" />
+              <div>
+                <span className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">Instrucción</span>
+                <p className="text-xs text-slate-600">Seleccione un archivo Excel con expedientes y defina el rango de fechas de ejecutoria para filtrar los expedientes que desea agregar al listado CUMPLIMIENTOS.</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Archivo Sentencias</label>
+              <input id="modal-file-agregar" type="file" accept=".xlsx,.xls,.xlsm" onChange={(e) => setArchivo(e.target.files?.[0] || null)} className="hidden" required />
+              <label htmlFor="modal-file-agregar" className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-all hover:border-[#1e40af] hover:bg-blue-50">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="rounded-lg bg-slate-100 p-3"><FileSpreadsheet className="w-6 h-6 text-slate-500" /></div>
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-slate-700">{archivo ? archivo.name : 'Seleccionar Archivo Excel'}</p>
+                    <p className="text-xs text-slate-500 mt-1">{archivo ? `${(archivo.size / 1024).toFixed(2)} KB` : 'Haz clic para seleccionar un archivo .xlsx o .xls'}</p>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Inicial de Ejecutoria</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input type="date" value={fechaInicial} onChange={(e) => setFechaInicial(e.target.value)} className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" required />
                 </div>
               </div>
-            </label>
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Calendar className="h-4 w-4 text-blue-600" />Fecha Inicial de Ejecutoria</label>
-              <input type="date" value={fechaInicial} onChange={(e) => setFechaInicial(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500" required />
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Final de Ejecutoria</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input type="date" value={fechaFinal} onChange={(e) => setFechaFinal(e.target.value)} className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" required />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Calendar className="h-4 w-4 text-blue-600" />Fecha Final de Ejecutoria</label>
-              <input type="date" value={fechaFinal} onChange={(e) => setFechaFinal(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500" required />
-            </div>
+
+            {result && (
+              <div className="mt-4">
+                <ResultStats title="Expedientes Agregados al Listado CUMPLIMIENTOS" result={result} labels={{ total: 'Procesados', nuevos: 'Insertados', duplicados: 'Duplicados', omitidos: 'Omitidos' }} />
+              </div>
+            )}
+            
+            {error && (
+              <div className="mt-4">
+                <ErrorBox error={error} />
+              </div>
+            )}
           </div>
-          <ResultStats title="Expedientes Agregados al Listado CUMPLIMIENTOS" result={result} labels={{ total: 'Procesados', nuevos: 'Insertados', duplicados: 'Duplicados', omitidos: 'Omitidos' }} />
-          <ErrorBox error={error} />
-        </div>
-        <div className="mt-8 flex items-center gap-3 border-t border-gray-200 pt-6">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-100">{result ? 'Cerrar' : 'Cancelar'}</button>
-          {!result && (
-            <button type="submit" disabled={!archivo || !fechaInicial || !fechaFinal || saving} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-3 font-medium text-white shadow-lg shadow-blue-500/30 transition-all hover:from-blue-600 hover:to-blue-700 disabled:opacity-60">
-              {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileSpreadsheet className="h-5 w-5" />}
-              Agregar al Listado CUMPLIMIENTOS
-            </button>
-          )}
-        </div>
-      </form>
-    </ModalShell>
+
+          <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+            {result ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors shadow-sm"
+              >
+                Cerrar
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!archivo || !fechaInicial || !fechaFinal || saving}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Agregar al Listado CUMPLIMIENTOS
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

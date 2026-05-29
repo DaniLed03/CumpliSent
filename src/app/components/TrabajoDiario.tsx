@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { SortDirection, DateFilterTreeNode, MONTH_NAMES, TriStateCheckbox, parseSortDate, parseDateFilterOption, buildDateFilterTree, getFilterMenuSortLabel } from './FilterUtils';
 import {
   ClipboardList,
   History,
@@ -11,7 +12,9 @@ import {
   X,
   RefreshCw,
   FolderOpen,
-  ChevronDown
+  ChevronDown,
+  ArrowUpDown,
+  FileEdit
 } from 'lucide-react';
 import { showStyledAlert } from '../utils/alert';
 import { toastSuccess, toastError, toastWarning } from '../utils/toast';
@@ -122,6 +125,372 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
   const [mesas, setMesas] = useState<MesaRecord[]>([]);
   const [users, setUsers] = useState<any[]>([]);
 
+  // --- EXCEL HEADER FILTERS STATE ---
+  const [tableColumnFilters, setTableColumnFilters] = useState<Record<string, string[]>>({});
+  const [openTableFilter, setOpenTableFilter] = useState<string | null>(null);
+  const [draftTableFilterValues, setDraftTableFilterValues] = useState<string[]>([]);
+  const [tableFilterSearch, setTableFilterSearch] = useState('');
+
+  const [expandedDateFilterNodes, setExpandedDateFilterNodes] = useState<Record<string, boolean>>({});
+  const [sortLevels, setSortLevels] = useState<Array<{ id: string; column: string; direction: SortDirection }>>([]);
+  const [draftSortLevels, setDraftSortLevels] = useState<Array<{ id: string; column: string; direction: SortDirection }>>([]);
+
+  const renderDateFilterTreeNode = (node: DateFilterTreeNode, depth = 0) => {
+    const hasChildren = Boolean(node.children?.length);
+    const expanded = expandedDateFilterNodes[node.id] ?? false;
+    const selectedCount = node.values.filter((value) => draftTableFilterValues.includes(value)).length;
+    const checked = node.values.length > 0 && selectedCount === node.values.length;
+    const indeterminate = selectedCount > 0 && selectedCount < node.values.length;
+
+    return (
+      <div key={node.id} style={{ position: 'relative' }}>
+        <div style={{
+          position: 'absolute',
+          left: depth === 0 ? 6 : 6,
+          top: hasChildren && expanded ? 18 : 0,
+          bottom: 0,
+          width: 1,
+          borderLeft: '1px dotted #999',
+          display: 'none',
+        }} />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            height: 22,
+            paddingLeft: 4,
+            borderRadius: 3,
+            cursor: 'pointer',
+            marginBottom: 1,
+          }}
+          className="hover:bg-slate-50"
+        >
+          {hasChildren ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedDateFilterNodes((prev) => ({ ...prev, [node.id]: !expanded }));
+              }}
+              style={{
+                width: 11,
+                height: 11,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid #999',
+                backgroundColor: '#fff',
+                fontSize: 9,
+                marginRight: 4,
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              {expanded ? '-' : '+'}
+            </button>
+          ) : (
+            <span style={{ display: 'inline-block', width: 11, height: 11, marginRight: 4, flexShrink: 0 }} />
+          )}
+          <TriStateCheckbox
+            checked={checked}
+            indeterminate={indeterminate}
+            onChange={(nextChecked) => {
+              setDraftTableFilterValues((current) => {
+                const withoutNode = current.filter((value) => !node.values.includes(value));
+                return nextChecked ? [...withoutNode, ...node.values] : withoutNode;
+              });
+            }}
+          />
+          <span style={{ marginLeft: 4, fontSize: 11, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: depth === 0 ? 600 : 500 }}>
+            {node.label}
+          </span>
+        </div>
+
+        {hasChildren && expanded && (
+          <div style={{ paddingLeft: 10, position: 'relative' }}>
+            {node.children?.map((child) => renderDateFilterTreeNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const getTableFilterValue = useCallback((exp: any, key: string): string => {
+    switch (key) {
+      case 'numeroOrden': return String(exp.numeroOrden || '');
+      case 'juicio': return String(exp.numeroJuicio || '');
+      case 'mesa': {
+        const m = mesas.find((m) => m.ID_MESA === exp.idMesa);
+        return m ? m.MESA : `Mesa ${exp.idMesa}`;
+      }
+      case 'persona': {
+        const m = mesas.find((m) => m.ID_MESA === exp.idMesa);
+        return m?.NOMBRE || '';
+      }
+      case 'ultimoRequerimiento': return String(formatDateDMY(exp.ultimoRequerimiento) || '-');
+      case 'diasNaturales': return String(exp.diasNaturalesTranscurridos || '-');
+      case 'diasHabiles': return String(exp.diasHabilesTranscurridos || '-');
+      case 'fechaAcuerdo': return String(formatDateDMY(exp.fechaAcuerdo) || '-');
+      case 'estatus': return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
+      case 'observaciones': return String(exp.observacionesDiario || '');
+      case 'capturadoPor': return String(exp.usuarioNombre || '');
+      case 'fechaCaptura': return exp.fechaCapturaDiario ? new Date(exp.fechaCapturaDiario).toLocaleString() : '-';
+      default: return '';
+    }
+  }, [mesas]);
+
+  const getTableFilterOptions = useCallback((key: string) => {
+    const vals = expedientes.map(exp => getTableFilterValue(exp, key));
+    return Array.from(new Set(vals)).filter(Boolean).sort();
+  }, [expedientes, getTableFilterValue]);
+
+  const applyExcelColumnFilter = () => {
+    if (!openTableFilter) return;
+    setTableColumnFilters(prev => {
+      const next = { ...prev };
+      const allOpts = getTableFilterOptions(openTableFilter);
+      if (draftTableFilterValues.length === allOpts.length || draftTableFilterValues.length === 0) {
+        delete next[openTableFilter];
+      } else {
+        next[openTableFilter] = draftTableFilterValues;
+      }
+      return next;
+    });
+    setOpenTableFilter(null);
+    setTableFilterSearch('');
+  };
+
+  const clearExcelColumnFilters = () => {
+    setTableColumnFilters({});
+    setOpenTableFilter(null);
+    setDraftTableFilterValues([]);
+  };
+
+
+  const openExcelFilter = (key: string) => {
+    setOpenTableFilter(key);
+    setTableFilterSearch('');
+    setDraftTableFilterValues(tableColumnFilters[key] || getTableFilterOptions(key));
+  };
+
+  const filteredExpedientesExcel = expedientes.filter(exp => {
+      for (const [key, selectedVals] of Object.entries(tableColumnFilters)) {
+        if (selectedVals && selectedVals.length > 0) {
+          if (!selectedVals.includes(getTableFilterValue(exp, key))) {
+            return false;
+          }
+        }
+      }
+      return true;
+  });
+
+  
+  const renderTableHeader = (key: string, label: string, type: 'date' | 'text' | 'number' | 'estatus' | 'boolean', className: string, title?: string) => {
+    const isFiltered = !!tableColumnFilters[key];
+    const isOpen = openTableFilter === key;
+    const allOptions = isOpen ? getTableFilterOptions(key) : [];
+    const search = tableFilterSearch.toLowerCase();
+    
+    const visibleOptionsTs = allOptions.filter((option) => {
+      if (!search) return true;
+      if (type !== 'date') {
+        return option.toLowerCase().includes(search);
+      }
+      const parsed = parseDateFilterOption(option);
+      if (!parsed) {
+        return option.toLowerCase().includes(search);
+      }
+      const searchable = [
+        option,
+        String(parsed.year),
+        MONTH_NAMES[parsed.month],
+        String(parsed.day),
+        String(parsed.day).padStart(2, '0'),
+      ].join(' ').toLowerCase();
+      return searchable.includes(search);
+    });
+
+    const allVisibleSelected = visibleOptionsTs.length > 0 && visibleOptionsTs.every(o => draftTableFilterValues.includes(o));
+    const dateTree = type === 'date' ? buildDateFilterTree(visibleOptionsTs) : [];
+
+    return (
+      <th key={key} className={`${className} relative group pr-8`} title={title}>
+        <span className="block whitespace-nowrap truncate leading-tight">{label}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); openExcelFilter(key); }}
+          className={`absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded flex items-center justify-center transition-colors border ${isFiltered ? 'bg-white border-blue-600 text-blue-700' : 'bg-transparent border-transparent text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+          title={`Filtrar ${label}`}
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+
+        {isOpen && (
+          <div
+            className="absolute z-50 top-full left-0 mt-1 w-[340px] bg-white text-slate-900 border border-slate-200 rounded-xl shadow-2xl normal-case text-left ring-1 ring-black/5 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-200">
+              <p className="text-[10px] font-bold text-slate-500 tracking-wide uppercase truncate">{label}</p>
+            </div>
+
+            <div className="p-3 space-y-1">
+              {(['ASC', 'DESC'] as SortDirection[]).map((direction) => (
+                <button
+                  key={direction}
+                  className="w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                  onClick={() => {
+                    const nextSort = [{ id: `filtro-${Date.now()}`, column: key, direction }];
+                    setSortLevels(nextSort);
+                    setDraftSortLevels(nextSort);
+                    setOpenTableFilter(null);
+                  }}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="truncate">{getFilterMenuSortLabel(type, direction)}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="h-px bg-slate-200" />
+
+            <div className="p-3">
+            <input
+              value={tableFilterSearch}
+              onChange={(e) => setTableFilterSearch(e.target.value)}
+              placeholder="Buscar"
+              className="w-full h-9 border border-slate-300 rounded-md px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 mb-2 placeholder:text-slate-400"
+            />
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                <span className="text-[10px] font-semibold text-slate-500">
+                  {draftTableFilterValues.length} DE {allOptions.length} SELECCIONADOS
+                </span>
+                {tableFilterSearch && (
+                  <button
+                    onClick={() => setTableFilterSearch('')}
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    LIMPIAR BUSQUEDA
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-60 overflow-y-auto p-1.5 text-xs">
+              {type !== 'date' && (
+                <label className="flex items-center gap-2 py-2 px-2 rounded-md hover:bg-blue-50 font-semibold text-slate-800 cursor-pointer">
+                  <TriStateCheckbox
+                    checked={allVisibleSelected}
+                    indeterminate={
+                      visibleOptionsTs.some((option) => draftTableFilterValues.includes(option)) && !allVisibleSelected
+                    }
+                    onChange={(checked) => {
+                      setDraftTableFilterValues((current) => {
+                        const withoutVisible = current.filter((value) => !visibleOptionsTs.includes(value));
+                        return checked ? [...withoutVisible, ...visibleOptionsTs] : withoutVisible;
+                      });
+                    }}
+                  />
+                  (Seleccionar todo)
+                </label>
+              )}
+
+              {visibleOptionsTs.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[11px] text-slate-400">
+                  No hay coincidencias
+                </div>
+              ) : type === 'date' ? (
+                <div style={{ userSelect: 'none', fontSize: 12 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      height: 22,
+                      paddingLeft: 4,
+                      borderRadius: 3,
+                      cursor: 'pointer',
+                      marginBottom: 1,
+                    }}
+                    className="hover:bg-slate-50"
+                  >
+                    <span style={{ display: 'inline-block', width: 11, height: 11, marginRight: 4, flexShrink: 0 }} />
+                    <TriStateCheckbox
+                      checked={allVisibleSelected}
+                      indeterminate={
+                        visibleOptionsTs.some((option) => draftTableFilterValues.includes(option)) && !allVisibleSelected
+                      }
+                      onChange={(checked) => {
+                        setDraftTableFilterValues((current) => {
+                          const withoutVisible = current.filter((value) => !visibleOptionsTs.includes(value));
+                          return checked ? [...withoutVisible, ...visibleOptionsTs] : withoutVisible;
+                        });
+                      }}
+                    />
+                    <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, color: '#1e293b' }}>(Seleccionar todo)</span>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: 10,
+                      top: 0,
+                      bottom: 11,
+                      width: 1,
+                      borderLeft: '1px dotted #999',
+                    }} />
+                    {dateTree.map((node, idx) => (
+                      <div key={node.id} style={{ position: 'relative' }}>
+                        <div style={{
+                          position: 'absolute',
+                          left: 10,
+                          top: 11,
+                          width: 8,
+                          height: 1,
+                          borderTop: '1px dotted #999',
+                        }} />
+                        <div style={{ paddingLeft: 18 }}>
+                          {renderDateFilterTreeNode(node, 0)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                visibleOptionsTs.map((option) => {
+                  const checked = draftTableFilterValues.includes(option);
+                  return (
+                    <label
+                      key={option}
+                      className={`flex items-center gap-2 py-2 px-2 rounded-md cursor-pointer transition-colors ${checked ? 'bg-blue-50 text-slate-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setDraftTableFilterValues((current) =>
+                            e.target.checked
+                              ? [...current, option]
+                              : current.filter((value) => value !== option)
+                          );
+                        }}
+                        className="w-3.5 h-3.5 accent-blue-600"
+                      />
+                      <span className="truncate font-medium">{option}</span>
+                    </label>
+                  );
+                })
+              )}
+              </div>
+              <div className="p-2 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+               <button onClick={() => setOpenTableFilter(null)} className="px-3 py-1.5 rounded border border-slate-300 hover:bg-white font-semibold text-xs text-slate-700">Cancelar</button>
+               <button onClick={applyExcelColumnFilter} className="px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 font-semibold shadow-sm text-xs">ACEPTAR</button>
+              </div>
+            </div>
+          </div>
+          </div>
+        )}
+      </th>
+    );
+  };
+  // --- END EXCEL HEADER FILTERS STATE ---
   // Filters
   const [selectedMesaFilter, setSelectedMesaFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -204,6 +573,16 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
     }
   }, [historySearchQuery, historyMesaFilter]);
 
+  const limpiarFiltros = () => {
+    setSearchQuery('');
+    setSelectedMesaFilter('');
+    setMesaSearchQuery('');
+    setSortLevels([]);
+    clearExcelColumnFilters();
+  };
+
+  const hasAnyFilter = !!searchQuery || !!selectedMesaFilter || Object.keys(tableColumnFilters).length > 0;
+
   useEffect(() => {
     if (activeTab === 'vivos') {
       loadData();
@@ -282,13 +661,40 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
   }
 
   // Filter vivo list in UI
-  const filteredExpedientes = expedientes.filter(exp => {
-    // Search query filter
+
+  const sortedExpedientes = useMemo(() => {
+    let result = [...filteredExpedientesExcel];
+    for (let i = sortLevels.length - 1; i >= 0; i--) {
+      const { column, direction } = sortLevels[i];
+      result.sort((a, b) => {
+        let valA = getTableFilterValue(a, column);
+        let valB = getTableFilterValue(b, column);
+
+        if (column === 'diasNaturales' || column === 'diasHabiles' || column === 'numeroOrden') {
+          const numA = parseSortNumber(valA) ?? -Infinity;
+          const numB = parseSortNumber(valB) ?? -Infinity;
+          return direction === 'ASC' ? numA - numB : numB - numA;
+        }
+
+        if (column === 'fechaAcuerdo' || column === 'fechaCaptura' || column === 'ultimoRequerimiento') {
+          const numA = parseSortDate(valA) ?? -Infinity;
+          const numB = parseSortDate(valB) ?? -Infinity;
+          return direction === 'ASC' ? numA - numB : numB - numA;
+        }
+
+        const strA = String(valA || '').toLowerCase();
+        const strB = String(valB || '').toLowerCase();
+        return direction === 'ASC' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+    return result;
+  }, [filteredExpedientesExcel, sortLevels, getTableFilterValue]);
+
+  const filteredExpedientes = sortedExpedientes.filter((exp: any) => {
     const matchesSearch = 
       String(exp.numeroJuicio || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       String(exp.numeroOrden || '').includes(searchQuery);
 
-    // Mesa select filter (only applicable if has view_all_mesas permission)
     const matchesMesa = 
       !can('trabajo.view_all_mesas') || 
       !selectedMesaFilter || 
@@ -360,107 +766,19 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     />
                   </div>
 
-                  {can('trabajo.view_all_mesas') && (
-                    <div
-                      className="relative"
-                      style={{ width: 440, minWidth: 360, maxWidth: 'calc(100vw - 620px)' }}
-                      onClick={(e) => e.stopPropagation()}
+                  {hasAnyFilter && (
+                    <button
+                      onClick={limpiarFiltros}
+                      className="h-8 flex items-center gap-1.5 px-3 py-0 border border-rose-200 bg-rose-50 text-rose-700 rounded-lg text-[11px] font-bold hover:bg-rose-100 hover:border-rose-300 transition-all duration-200 shadow-sm"
                     >
-                      <input
-                        type="text"
-                        placeholder={
-                          selectedMesaFilter
-                            ? (mesas.find(m => Number(m.ID_MESA) === Number(selectedMesaFilter))?.MESA || '') +
-                              ' - ' +
-                              (mesas.find(m => Number(m.ID_MESA) === Number(selectedMesaFilter))?.NOMBRE || 'Sin encargado')
-                            : 'Todas las mesas'
-                        }
-                        value={mesaSearchQuery}
-                        onClick={() => setOpenMesaDropdown(!openMesaDropdown)}
-                        onChange={(e) => {
-                          setMesaSearchQuery(e.target.value);
-                          setOpenMesaDropdown(true);
-                        }}
-                        style={{ width: '100%' }}
-                        className="h-8 truncate border border-slate-200 bg-white pl-3 pr-8 text-[11px] font-medium text-slate-700 shadow-sm transition-all duration-200 placeholder:text-slate-700 placeholder:font-semibold hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      />
-                      {selectedMesaFilter ? (
-                        <button
-                          onClick={() => {
-                            setSelectedMesaFilter('');
-                            setMesaSearchQuery('');
-                          }}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      )}
-
-                      {openMesaDropdown && (
-                        <div
-                          className="absolute z-50 top-full left-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
-                          style={{ width: '100%' }}
-                        >
-                          <div
-                            className={`px-3 py-1.5 text-[11px] cursor-pointer transition-colors border-l-2 font-medium ${
-                              !selectedMesaFilter ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-500 hover:bg-slate-50 border-transparent'
-                            }`}
-                            onClick={() => {
-                              setSelectedMesaFilter('');
-                              setMesaSearchQuery('');
-                              setOpenMesaDropdown(false);
-                            }}
-                          >
-                            TODAS LAS MESAS
-                          </div>
-                          <div className="h-px bg-slate-100 my-1"></div>
-                          {mesas
-                            .filter(m => {
-                              const term = mesaSearchQuery.toLowerCase();
-                              return (
-                                m.MESA.toLowerCase().includes(term) ||
-                                (m.NOMBRE || '').toLowerCase().includes(term)
-                              );
-                            })
-                            .length === 0 ? (
-                            <div className="px-3 py-2 text-[11px] text-slate-400 italic">No se encontraron resultados</div>
-                          ) : (
-                            mesas
-                              .filter(m => {
-                                const term = mesaSearchQuery.toLowerCase();
-                                return (
-                                  m.MESA.toLowerCase().includes(term) ||
-                                  (m.NOMBRE || '').toLowerCase().includes(term)
-                                );
-                              })
-                              .map((m) => (
-                                <div
-                                  key={m.ID_MESA}
-                                  className={`whitespace-normal break-words px-3 py-1.5 text-[11px] cursor-pointer transition-colors border-l-2 ${
-                                    Number(selectedMesaFilter) === Number(m.ID_MESA)
-                                      ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold'
-                                      : 'text-slate-700 hover:bg-slate-50 border-transparent'
-                                  }`}
-                                  onClick={() => {
-                                    setSelectedMesaFilter(String(m.ID_MESA));
-                                    setMesaSearchQuery('');
-                                    setOpenMesaDropdown(false);
-                                  }}
-                                >
-                                  {m.MESA} - {m.NOMBRE || 'Sin encargado'}
-                                </div>
-                              ))
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      <X className="w-3.5 h-3.5" />
+                      LIMPIAR FILTROS
+                    </button>
                   )}
                 </div>
 
-                <p className="text-[9px] font-bold text-slate-500 leading-none">
-                  {filteredExpedientes.length} de {expedientes.length} expediente(s) vivo(s)
+                <p className="text-[9px] text-slate-400 leading-none mt-1.5">
+                  TOTAL REGISTROS: {filteredExpedientes.length} DE {expedientes.length} EXPEDIENTE(S)
                 </p>
               </div>
 
@@ -498,18 +816,18 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                 <table className="trabajo-diario-table w-full text-xs">
                   <thead className="sticky top-0 z-50 bg-[#1e40af] text-white font-semibold">
                     <tr>
-                      <th className="bg-[#1e40af] px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">No. Orden</th>
-                      <th className="bg-[#1e40af] px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Juicio / Expediente</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Mesa</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Persona</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Último Requerimiento</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Días Naturales</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Días Hábiles</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Fecha Acuerda</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Estatus</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Observaciones Trabajo Diario</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Capturado Por</th>
-                      <th className="bg-[#1e40af] px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">Fecha Captura</th>
+                      {renderTableHeader('numeroOrden', 'No. Orden', 'number', 'px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('juicio', 'Juicio / Expediente', 'text', 'px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('mesa', 'Mesa', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('persona', 'Persona', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('ultimoRequerimiento', 'Último Requerimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('diasNaturales', 'Días Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Naturales Transcurridos')}
+                      {renderTableHeader('diasHabiles', 'Días Hábiles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Hábiles Transcurridos')}
+                      {renderTableHeader('fechaAcuerdo', 'Fecha Acuerdo', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('estatus', 'Estatus', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('observaciones', 'Observaciones Trabajo Diario', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('capturadoPor', 'Capturado Por', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('fechaCaptura', 'Fecha Captura', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {can('trabajo.capture') && (
                         <th className="trabajo-diario-action-cell bg-[#1e40af] px-4 py-3 text-center text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">
                           Acción
@@ -531,7 +849,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                           <td className="px-3 py-3 font-semibold text-slate-700 whitespace-nowrap">{oneLineCell(String(exp.numeroOrden || ''))}</td>
                           <td className="px-3 py-3 font-bold text-blue-800 whitespace-nowrap">{oneLineCell(exp.numeroJuicio || '')}</td>
                           <td className="px-4 py-3 text-slate-600 font-semibold whitespace-nowrap">{oneLineCell(mesaTexto)}</td>
-                          <td className="px-4 py-3 text-slate-600 font-semibold max-w-[160px] truncate" title={personaMesa}>{oneLineCell(personaMesa)}</td>
+                          <td className="px-4 py-3 text-slate-600 font-semibold whitespace-nowrap" title={personaMesa}>{oneLineCell(personaMesa)}</td>
                           <td className="px-4 py-3 text-slate-500 font-semibold whitespace-nowrap">{oneLineCell(formatDateDMY(exp.ultimoRequerimiento) || '-')}</td>
                           <td className="px-4 py-3 text-center text-slate-600 font-semibold">{exp.diasNaturalesTranscurridos || '-'}</td>
                           <td className="px-4 py-3 text-center text-slate-600 font-semibold">{exp.diasHabilesTranscurridos || '-'}</td>
@@ -554,7 +872,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                               {exp.observacionesDiario || '-'}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-slate-500 max-w-[140px] truncate" title={capturadoPorNombre}>{oneLineCell(capturadoPorNombre)}</td>
+                          <td className="px-4 py-3 text-slate-500 whitespace-nowrap" title={capturadoPorNombre}>{oneLineCell(capturadoPorNombre)}</td>
                           <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{oneLineCell(fechaCapturaTexto)}</td>
                           {can('trabajo.capture') && (
                             <td className="trabajo-diario-action-cell bg-white px-4 py-3 text-center whitespace-nowrap">
@@ -752,13 +1070,13 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                       <tr key={hist.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">{hist.expediente}</td>
                         <td className="px-4 py-3 text-slate-600 font-semibold whitespace-nowrap">{hist.mesaNombre}</td>
-                        <td className="px-4 py-3 text-slate-600 font-semibold max-w-[160px] truncate" title={hist.personaMesa || ''}>{oneLineCell(hist.personaMesa || '')}</td>
+                        <td className="px-4 py-3 text-slate-600 font-semibold whitespace-nowrap" title={hist.personaMesa || ''}>{oneLineCell(hist.personaMesa || '')}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <StatusBadge status={hist.estatusAtendido} />
                         </td>
                         <td className="px-4 py-3 text-slate-500 font-medium whitespace-nowrap">{hist.fechaAcuerdo || '-'}</td>
                         <td className="px-4 py-3 text-slate-600 max-w-[220px] truncate" title={hist.observaciones || ''}>{hist.observaciones || '-'}</td>
-                        <td className="px-4 py-3 text-slate-500 font-medium max-w-[140px] truncate" title={hist.usuarioNombre}>{oneLineCell(hist.usuarioNombre)}</td>
+                        <td className="px-4 py-3 text-slate-500 font-medium whitespace-nowrap" title={hist.usuarioNombre}>{oneLineCell(hist.usuarioNombre)}</td>
                         <td className="px-4 py-3 text-[10px] font-mono bg-slate-50 whitespace-nowrap">{hist.rol || '-'}</td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{new Date(hist.fechaCaptura).toLocaleString()}</td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{new Date(hist.fechaEnvioHistorial).toLocaleString()}</td>
@@ -781,101 +1099,106 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
 
       {/* Capture Modal */}
       {showCaptureModal && selectedExpediente && (
-        <div className="user-form-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => {
-          setShowCaptureModal(false);
-        }}>
-          <div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl overflow-hidden animate-scaleIn" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 flex items-center justify-between text-white" style={{ backgroundColor: '#1d4ed8' }}>
-              <h3 className="text-base font-bold uppercase tracking-wide">Capturar Trabajo Diario</h3>
-              <button onClick={() => {
-                setShowCaptureModal(false);
-              }} className="text-white/80 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={() => setShowCaptureModal(false)}>
+          <div
+            className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 640 }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <FileEdit className="w-4 h-4 text-blue-200" />
+                Capturar Trabajo Diario
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCaptureModal(false)}
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCaptureSubmit}>
-              <div className="p-6 bg-white overflow-y-auto max-h-[calc(100vh-200px)]">
-                <div className="grid grid-cols-3 gap-6 mb-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Orden</label>
-                    <div className="h-10 w-full flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
-                      {selectedExpediente.numeroOrden || '-'}
+            <form onSubmit={handleCaptureSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+                {/* Info Card for Static Data */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Orden</span>
+                      <span className="text-xs font-semibold text-slate-700">{selectedExpediente.numeroOrden || '-'}</span>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Juicio/Expediente</label>
-                    <div className="h-10 w-full flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 font-bold">
-                      {selectedExpediente.numeroJuicio || '-'}
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Juicio/Exp</span>
+                      <span className="text-[13px] font-bold text-[#1e40af]">{selectedExpediente.numeroJuicio || '-'}</span>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Mesa</label>
-                    <div className="h-10 w-full flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
-                      {mesas.find(m => Number(m.ID_MESA) === Number(selectedExpediente.idMesa))?.MESA || '-'}
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mesa</span>
+                      <span className="text-xs font-semibold text-slate-700">{mesas.find(m => Number(m.ID_MESA) === Number(selectedExpediente.idMesa))?.MESA || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Último Req.</span>
+                      <span className="text-xs font-semibold text-slate-700">{formatDateDMY(selectedExpediente.ultimoRequerimiento)}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Último Requerimiento</label>
-                    <div className="h-10 w-full flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
-                      {selectedExpediente.ultimoRequerimiento || '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Fecha Acuerdo</label>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Acuerdo</label>
                     <input
                       type="date"
                       value={formFechaAcuerdo}
                       onChange={(e) => setFormFechaAcuerdo(e.target.value)}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                      required
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Estatus Calculado</label>
-                    <div className="flex h-10 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3">
-                      <StatusBadge status={deriveTrabajoStatus(selectedExpediente.ultimoRequerimiento, formFechaAcuerdo)} />
-                    </div>
+                  <div className="flex flex-col h-full">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">Estatus Calculado</label>
+                    {(() => {
+                      const currentStatus = deriveTrabajoStatus(selectedExpediente.ultimoRequerimiento, formFechaAcuerdo);
+                      const isAtendido = currentStatus === 'ATENDIDA' || currentStatus === 'ATENDIDO';
+                      const isSinAtender = currentStatus === 'SIN ATENDER';
+                      
+                      const containerClass = isAtendido 
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                        : isSinAtender 
+                          ? 'bg-red-50 border-red-200 text-red-700' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600';
+
+                      return (
+                        <div className={`h-11 w-full border rounded-lg shadow-sm flex items-center justify-center transition-colors ${containerClass}`}>
+                          <span className="text-xs font-extrabold uppercase tracking-widest">{currentStatus}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                <div className="mb-2">
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Observaciones de Trabajo Diario</label>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Observaciones de Trabajo Diario</label>
                   <textarea
                     value={formObservaciones}
                     onChange={(e) => setFormObservaciones(e.target.value)}
-                    className="w-full rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-800 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors placeholder:text-slate-400"
+                    className="w-full rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm placeholder:text-slate-300"
                     style={{ height: '120px' }}
-                    placeholder="Observaciones del trabajo diario..."
+                    placeholder="Escriba las observaciones del trabajo diario aquí..."
                   />
                 </div>
 
                 {modalError && (
-                  <div className="mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <span>{modalError}</span>
+                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-red-700 mt-4">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-[13px] font-medium">{modalError}</span>
                   </div>
                 )}
               </div>
 
-              <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3 rounded-b-xl">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCaptureModal(false);
-                  }}
-                  className="px-5 py-2.5 rounded-md bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
                 <button
                   type="submit"
                   disabled={savingCapture}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-md text-white text-sm font-bold transition-colors disabled:opacity-50"
-                  style={{ backgroundColor: '#1d4ed8' }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
                 >
                   {savingCapture ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Guardar Captura
@@ -887,4 +1210,19 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       )}
     </div>
   );
+}
+
+function parseSortNumber(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const text = String(value).trim();
+  if (text === '') {
+    return null;
+  }
+  const numeric = Number(text.replace(/,/g, ''));
+  return Number.isFinite(numeric) ? numeric : null;
 }

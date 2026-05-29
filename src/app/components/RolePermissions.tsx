@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  AlertCircle,
-  Check,
-  Edit,
   KeyRound,
   Loader2,
   Plus,
-  Save,
   Search,
   ShieldCheck,
-  X,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import { showStyledAlert } from '../utils/alert';
 import { toastSuccess } from '../utils/toast';
+import { NuevoRolModal } from './modals/SystemModals';
 
 export default function RolePermissions({
   canCreate = true,
@@ -29,10 +28,9 @@ export default function RolePermissions({
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleWithPermissionsRecord | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formPermissions, setFormPermissions] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingRole, setDeletingRole] = useState<RoleWithPermissionsRecord | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -58,60 +56,6 @@ export default function RolePermissions({
     loadData();
   }, [loadData]);
 
-  function normalizePermissionCategory(category?: string) {
-    const raw = (category || 'GENERAL').trim();
-    const normalized = raw
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toUpperCase();
-
-    if (normalized === 'MESAS DE TRAMITE') {
-      return 'MESAS DE TRÁMITE';
-    }
-
-    if (normalized === 'ROLES') {
-      return 'ROLES Y PERMISOS';
-    }
-
-    return raw;
-  }
-
-  const permissionCategoryOrder = [
-    'VISTAS',
-    'CUMPLIMIENTOS',
-    'DIAS INHABILES',
-    'MESAS DE TRÁMITE',
-    'TRABAJO DIARIO',
-    'ADMINISTRACION',
-    'SERVIDOR',
-    'USUARIOS',
-    'ROLES Y PERMISOS',
-  ];
-
-  const groupedPermissions = useMemo(() => {
-    const seen = new Set<string>();
-
-    const groups = permissions.reduce<Record<string, PermissionRecord[]>>((acc, permission) => {
-      if (seen.has(permission.IdPermiso)) {
-        return acc;
-      }
-      seen.add(permission.IdPermiso);
-
-      const category = normalizePermissionCategory(permission.Categoria);
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(permission);
-      return acc;
-    }, {});
-
-    return Object.fromEntries(
-      Object.entries(groups).sort(([categoryA], [categoryB]) => {
-        const indexA = permissionCategoryOrder.indexOf(categoryA);
-        const indexB = permissionCategoryOrder.indexOf(categoryB);
-        return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
-      }),
-    );
-  }, [permissions]);
-
   const filteredRoles = roles.filter((role) => {
     const term = searchTerm.toLowerCase();
     return (
@@ -123,8 +67,6 @@ export default function RolePermissions({
   function resetForm() {
     setShowForm(false);
     setEditingRole(null);
-    setFormName('');
-    setFormPermissions([]);
     setFormError('');
     setSaving(false);
   }
@@ -136,34 +78,17 @@ export default function RolePermissions({
 
   function openEdit(role: RoleWithPermissionsRecord) {
     setEditingRole(role);
-    setFormName(role.NombreRol);
-    setFormPermissions(role.Permisos || []);
     setFormError('');
     setShowForm(true);
   }
 
-  function togglePermission(permissionId: string) {
-    setFormPermissions((current) =>
-      current.includes(permissionId)
-        ? current.filter((item) => item !== permissionId)
-        : [...current, permissionId]
-    );
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave(rolData: { NombreRol: string; Permisos: string[] }) {
     setFormError('');
-
-    if (!formName.trim()) {
-      setFormError('El nombre del rol es requerido');
-      return;
-    }
-
     setSaving(true);
     try {
       const payload = {
-        NombreRol: formName.trim().toUpperCase(),
-        Permisos: canAssignPermissions ? formPermissions : editingRole?.Permisos || [],
+        NombreRol: rolData.NombreRol,
+        Permisos: canAssignPermissions ? rolData.Permisos : editingRole?.Permisos || [],
       };
       const result = editingRole
         ? await window.api.updateRole(editingRole.IdRol, payload)
@@ -171,12 +96,13 @@ export default function RolePermissions({
 
       if (!result.ok) {
         setFormError(result.error || 'No se pudo guardar el rol');
-        return;
+        return false;
       }
 
       resetForm();
       await loadData();
       toastSuccess('Operacion completada', 'Los permisos del rol se guardaron correctamente.');
+      return true;
     } catch (error: any) {
       setFormError(error?.message || 'Error inesperado');
       showStyledAlert({
@@ -184,10 +110,39 @@ export default function RolePermissions({
         text: error?.message || 'Error inesperado',
         icon: 'error',
       });
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  const handleDeleteRole = (role: RoleWithPermissionsRecord) => {
+    setDeletingRole(role);
+  };
+
+  const confirmDeleteRole = async () => {
+    if (!deletingRole) return;
+    try {
+      const res = await window.api.deleteRole(deletingRole.IdRol);
+      if (!res.ok) {
+        showStyledAlert({
+          title: 'Error del sistema',
+          text: res.error || 'Error al eliminar rol',
+          icon: 'error',
+        });
+        return;
+      }
+      setDeletingRole(null);
+      await loadData();
+      toastSuccess('Operación completada', 'El rol fue eliminado correctamente.');
+    } catch (error: any) {
+      showStyledAlert({
+        title: 'Error del sistema',
+        text: error?.message || 'Error inesperado',
+        icon: 'error',
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -232,7 +187,7 @@ export default function RolePermissions({
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-muted/50 border-b border-border">
+            <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Rol</th>
                 <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Permisos Asignados</th>
@@ -253,13 +208,22 @@ export default function RolePermissions({
                   </td>
                   <td className="px-4 py-3 text-center">
                     {canEdit && (
-                      <button
-                        onClick={() => openEdit(role)}
-                        className="p-1.5 hover:bg-accent rounded-md transition-colors"
-                        title="Editar rol"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openEdit(role)}
+                          className="p-1.5 hover:bg-accent rounded-md transition-colors"
+                          title="Editar rol"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRole(role)}
+                          className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors inline-flex"
+                          title="Eliminar rol"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -276,95 +240,47 @@ export default function RolePermissions({
         </div>
       </div>
 
-      {showForm && (
-        <div className="user-form-overlay" onClick={resetForm}>
-          <div className="user-form-modal module-modal-shell max-w-5xl" onClick={(e) => e.stopPropagation()}>
-            <div className="module-modal-header">
-              <h3 className="module-modal-title">
-                {editingRole ? 'Editar rol y permisos' : 'Nuevo rol'}
+      <NuevoRolModal
+        isOpen={showForm}
+        onClose={resetForm}
+        onSave={handleSave}
+        permissions={permissions}
+        initialData={editingRole ? { NombreRol: editingRole.NombreRol, Permisos: editingRole.Permisos || [] } : null}
+        title={editingRole ? 'Editar Rol y Permisos' : 'Nuevo Rol'}
+        canAssignPermissions={canAssignPermissions}
+        saving={saving}
+        error={formError}
+      />
+
+      {/* Delete Modal */}
+      {deletingRole && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                ¿Eliminar rol {deletingRole.NombreRol}?
               </h3>
-              <button onClick={resetForm} className="p-1 hover:bg-blue-700 rounded-md transition-colors">
-                <X className="w-4 h-4" />
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                onClick={() => setDeletingRole(null)}
+                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteRole}
+                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm"
+              >
+                Sí, eliminar
               </button>
             </div>
-
-            <form onSubmit={handleSubmit}>
-              <div className="module-modal-body space-y-5 max-h-[70vh] overflow-y-auto">
-                <div className="module-field">
-                  <label className="module-label">Nombre del rol</label>
-                  <input
-                    type="text"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="module-input uppercase"
-                    placeholder="NOMBRE DEL ROL"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  {Object.entries(groupedPermissions).map(([category, items]) => (
-                    <div key={category} className="rounded-lg border border-slate-200 overflow-hidden">
-                      <div className="bg-slate-100 px-4 py-2">
-                        <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">{category}</p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 p-4">
-                        {items.map((permission) => {
-                          const checked = formPermissions.includes(permission.IdPermiso);
-                          return (
-                            <button
-                              key={permission.IdPermiso}
-                              type="button"
-                              onClick={() => canAssignPermissions && togglePermission(permission.IdPermiso)}
-                              disabled={!canAssignPermissions}
-                              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold transition-colors ${
-                                checked
-                                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                              }`}
-                            >
-                              <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                                checked ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
-                              }`}>
-                                {checked && <Check className="w-3 h-3" />}
-                              </span>
-                              <span>{permission.NombrePermiso}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {formError && (
-                  <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-100 rounded-lg text-red-700">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="text-[10px]">{formError}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-5 py-2 bg-slate-100 text-slate-700 rounded-md text-sm font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#1e40af] text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors disabled:opacity-50"
-                >
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  Guardar Permisos
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

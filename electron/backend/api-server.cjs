@@ -13,6 +13,7 @@ const {
   listUsers,
   normalizeRoleName,
   updateRole,
+  deleteRole,
   updateUser,
   verifyRememberSession,
 } = require('./auth-store.cjs');
@@ -250,6 +251,20 @@ function buildApp() {
       return reply.code(400).send({ error: 'ID de rol invalido' });
     }
     const result = updateRole(id, request.body || {});
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.error });
+    }
+    return result;
+  });
+
+  app.delete('/api/roles/:id', {
+    preHandler: [app.authenticate, app.requirePermission('roles.edit')],
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!id) {
+      return reply.code(400).send({ error: 'ID de rol invalido' });
+    }
+    const result = deleteRole(id);
     if (!result.ok) {
       return reply.code(400).send({ error: result.error });
     }

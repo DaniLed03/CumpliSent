@@ -25,6 +25,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { toastError, toastSuccess, toastWarning } from '../utils/toast';
+import { SortDirection, DateFilterTreeNode, MONTH_NAMES, TriStateCheckbox, parseSortDate, parseDateFilterOption, buildDateFilterTree, getFilterMenuSortLabel } from './FilterUtils';
 
 // Componente principal de Cumplimientos tipo Excel
 interface Expediente {
@@ -62,7 +63,7 @@ const TABLE_OVERSCAN_ROWS = 14;
 const TABLE_COLUMN_COUNT = 25;
 
 type EstatusBand = 'EMPTY' | 'GREEN' | 'YELLOW' | 'PINK' | 'RED';
-type SortDirection = 'ASC' | 'DESC';
+
 type SortColumnKey = keyof Expediente;
 type SortLevel = {
   id: string;
@@ -70,27 +71,9 @@ type SortLevel = {
   direction: SortDirection;
 };
 
-type DateFilterTreeNode = {
-  id: string;
-  label: string;
-  values: string[];
-  children?: DateFilterTreeNode[];
-};
 
-const MONTH_NAMES = [
-  'enero',
-  'febrero',
-  'marzo',
-  'abril',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
-  'septiembre',
-  'octubre',
-  'noviembre',
-  'diciembre',
-];
+
+
 
 const SORT_COLUMNS: Array<{ key: SortColumnKey; label: string; type: 'number' | 'text' | 'date' | 'boolean' | 'estatus' }> = [
   { key: 'numeroOrden', label: 'NÚMERO DE ORDEN', type: 'number' },
@@ -291,7 +274,7 @@ function matchesEstatusFilter(exp: Expediente, filter: string) {
   return String(exp.estatus ?? '') === filter;
 }
 
-function getSortColumn(key: SortColumnKey) {
+function getSortColumn(key: string) {
   return SORT_COLUMNS.find((column) => column.key === key) || SORT_COLUMNS[0];
 }
 
@@ -313,32 +296,6 @@ function getSortOrderLabel(column: ReturnType<typeof getSortColumn>, direction: 
   return direction === 'ASC' ? 'De menor a mayor' : 'De mayor a menor';
 }
 
-function getFilterMenuSortLabel(column: ReturnType<typeof getSortColumn>, direction: SortDirection) {
-  if (column.type === 'date') {
-    return direction === 'ASC'
-      ? 'Ordenar de mas antiguos a mas recientes'
-      : 'Ordenar de mas recientes a mas antiguos';
-  }
-
-  if (column.type === 'estatus') {
-    return direction === 'ASC'
-      ? 'Ordenar verde, amarillo, rojo claro y rojo'
-      : 'Ordenar rojo, rojo claro, amarillo y verde';
-  }
-
-  if (column.type === 'number') {
-    return direction === 'ASC'
-      ? 'Ordenar de menor a mayor'
-      : 'Ordenar de mayor a menor';
-  }
-
-  if (column.type === 'boolean') {
-    return direction === 'ASC' ? 'Ordenar No a Si' : 'Ordenar Si a No';
-  }
-
-  return direction === 'ASC' ? 'Ordenar A a Z' : 'Ordenar Z a A';
-}
-
 function parseSortNumber(value: unknown) {
   if (value === null || value === undefined) {
     return null;
@@ -355,158 +312,6 @@ function parseSortNumber(value: unknown) {
 
   const numeric = Number(text.replace(/,/g, ''));
   return Number.isFinite(numeric) ? numeric : null;
-}
-
-function parseSortDate(value: unknown) {
-  if (value === null || value === undefined || typeof value === 'boolean') {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return null;
-    return Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
-  }
-
-  const text = String(value).trim();
-  if (!text || text === '-') {
-    return null;
-  }
-
-  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (iso) {
-    return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-  }
-
-  const mx = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (mx) {
-    const year = mx[3].length === 2 ? Number(`20${mx[3]}`) : Number(mx[3]);
-    return Date.UTC(year, Number(mx[2]) - 1, Number(mx[1]));
-  }
-
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-}
-
-function parseDateFilterOption(option: string) {
-  // Parsear formato dd/mm/aaaa (formato principal del sistema)
-  const dmy = option.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmy) {
-    return {
-      year: Number(dmy[3]),
-      month: Number(dmy[2]) - 1,
-      day: Number(dmy[1]),
-    };
-  }
-  // Fallback: intentar parsear con parseSortDate
-  const time = parseSortDate(option);
-  if (time === null) {
-    return null;
-  }
-  const date = new Date(time);
-  return {
-    year: date.getUTCFullYear(),
-    month: date.getUTCMonth(),
-    day: date.getUTCDate(),
-  };
-}
-
-function buildDateFilterTree(options: string[]): DateFilterTreeNode[] {
-  const grouped = new Map<number, Map<number, Map<number, string[]>>>();
-  const emptyValues: string[] = [];
-
-  options.forEach((option) => {
-    const parsed = parseDateFilterOption(option);
-
-    if (!parsed) {
-      emptyValues.push(option);
-      return;
-    }
-
-    if (!grouped.has(parsed.year)) {
-      grouped.set(parsed.year, new Map());
-    }
-
-    const months = grouped.get(parsed.year)!;
-    if (!months.has(parsed.month)) {
-      months.set(parsed.month, new Map());
-    }
-
-    const days = months.get(parsed.month)!;
-    days.set(parsed.day, [...(days.get(parsed.day) || []), option]);
-  });
-
-  const yearNodes = [...grouped.entries()]
-    .sort(([left], [right]) => right - left)
-    .map(([year, months]) => {
-      const monthNodes = [...months.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([month, days]) => {
-          const dayNodes = [...days.entries()]
-            .sort(([left], [right]) => left - right)
-            .map(([day, values]) => ({
-              id: `${year}-${month + 1}-${day}`,
-              label: String(day).padStart(2, '0'),
-              values,
-            }));
-
-          return {
-            id: `${year}-${month + 1}`,
-            label: MONTH_NAMES[month],
-            values: dayNodes.flatMap((node) => node.values),
-            children: dayNodes,
-          };
-        });
-
-      return {
-        id: String(year),
-        label: String(year),
-        values: monthNodes.flatMap((node) => node.values),
-        children: monthNodes,
-      };
-    });
-
-  if (emptyValues.length > 0) {
-    yearNodes.push({
-      id: 'empty',
-      label: '(Vacías)',
-      values: emptyValues,
-      children: [],
-    });
-  }
-
-  return yearNodes;
-}
-
-function TriStateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  const ref = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.indeterminate = indeterminate;
-    }
-  }, [indeterminate]);
-
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={(event) => onChange(event.target.checked)}
-      className="w-3.5 h-3.5 accent-blue-600"
-    />
-  );
 }
 
 function getEstatusSortNumber(exp: Expediente) {
@@ -695,9 +500,7 @@ export default function CumplimientosExcel({
   const [filtroMateriaBusq, setFiltroMateriaBusq] = useState('');
   const [filtroFirmaBusq, setFiltroFirmaBusq] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);
-  const [excelFilterEnabled, setExcelFilterEnabled] = useState(false);
-  const [tableColumnFilters, setTableColumnFilters] = useState<Partial<Record<SortColumnKey, string[]>>>({});
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);  const [tableColumnFilters, setTableColumnFilters] = useState<Partial<Record<SortColumnKey, string[]>>>({});
   const [openTableFilter, setOpenTableFilter] = useState<SortColumnKey | null>(null);
   const [tableFilterSearch, setTableFilterSearch] = useState('');
   const [draftTableFilterValues, setDraftTableFilterValues] = useState<string[]>([]);
@@ -763,24 +566,6 @@ export default function CumplimientosExcel({
     setTableFilterSearch('');
     setDraftTableFilterValues([]);
   }, []);
-
-  const toggleExcelFilter = () => {
-    setExcelFilterEnabled((enabled) => {
-      if (enabled) {
-        setFiltroEstatus('');
-        setFiltroJuicio('');
-        setFiltroMateria('');
-        setFiltroLocalizado('');
-        setFiltroFirma('');
-        setFiltroJuicioBusq('');
-        setFiltroMateriaBusq('');
-        setFiltroFirmaBusq('');
-        clearExcelColumnFilters();
-      }
-      return !enabled;
-    });
-  };
-
   const openExcelColumnFilter = (key: SortColumnKey) => {
     const options = getTableFilterOptions(key);
     const column = getSortColumn(key);
@@ -2287,7 +2072,7 @@ export default function CumplimientosExcel({
 
   const renderTableHeader = (header: typeof TABLE_HEADERS[number]) => {
     const column = getSortColumn(header.key);
-    const isMenuOpen = excelFilterEnabled && openTableFilter === header.key;
+    const isMenuOpen = openTableFilter === header.key;
     const options = isMenuOpen ? getTableFilterOptions(header.key) : [];
     const search = deferredTableFilterSearch.toLowerCase();
     const visibleOptions = options.filter((option) => {
@@ -2317,24 +2102,23 @@ export default function CumplimientosExcel({
     return (
       <th
         key={header.key}
-        className={`px-2 py-2 ${excelFilterEnabled ? 'pr-7' : ''} ${header.align === 'center' ? 'text-center' : 'text-left'} font-semibold border-r border-blue-600 whitespace-nowrap ${header.minWidth} relative`}
+        className={`px-2 py-2 pr-7 ${header.align === 'center' ? 'text-center' : 'text-left'} font-semibold border-r border-blue-600 whitespace-nowrap ${header.minWidth} relative`}
       >
         <span className="block whitespace-nowrap truncate leading-tight">{header.label}</span>
-        {excelFilterEnabled && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openExcelColumnFilter(header.key);
-            }}
-            className={`absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center border bg-white hover:bg-slate-100 ${isFiltered ? 'border-blue-600 text-blue-700' : 'border-slate-300 text-slate-700'}`}
-            title={`Filtrar ${header.label}`}
-          >
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openExcelColumnFilter(header.key);
+          }}
+          className={`absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded flex items-center justify-center transition-colors border ${isFiltered ? 'bg-white border-blue-600 text-blue-700' : 'bg-transparent border-transparent text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+          title={`Filtrar ${header.label}`}
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
 
-        {excelFilterEnabled && openTableFilter === header.key && (
+
+        {openTableFilter === header.key && (
           <div
             className="absolute z-50 top-full left-0 mt-1 w-[340px] bg-white text-slate-900 border border-slate-200 rounded-xl shadow-2xl normal-case text-left ring-1 ring-black/5 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
@@ -2358,7 +2142,7 @@ export default function CumplimientosExcel({
                   }}
                 >
                   <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="truncate">{getFilterMenuSortLabel(column, direction)}</span>
+                  <span className="truncate">{getFilterMenuSortLabel(column.type, direction)}</span>
                 </button>
               ))}
             </div>
@@ -2936,18 +2720,7 @@ export default function CumplimientosExcel({
           )}
 
           <div className="ml-auto flex items-end self-end gap-2">
-            <button
-              onClick={toggleExcelFilter}
-              className={`h-8 flex items-center justify-center gap-1.5 px-3 rounded border text-[10px] font-semibold shadow-sm transition-colors ${
-                excelFilterEnabled
-                  ? 'bg-blue-50 border-blue-500 text-blue-700 ring-2 ring-blue-200'
-                  : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50'
-              }`}
-              title="Filtro"
-            >
-              <Filter className="w-3.5 h-3.5" />
-              Filtro
-            </button>
+
             <button
               onClick={openSortModal}
               className="h-8 flex items-center justify-center gap-1.5 px-3 bg-slate-800 border border-slate-900 text-white rounded text-[10px] font-semibold shadow-sm hover:bg-slate-900 transition-colors"
@@ -3318,74 +3091,59 @@ export default function CumplimientosExcel({
       {/* MODAL ORDENAR */}
       {showModalOrdenar && createPortal(
         <div
-          className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[9999] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
           onClick={() => setOpenDropdown(null)}
         >
           <div
-            className="w-full max-w-[700px] bg-white rounded-md shadow-2xl border border-blue-300"
-            onClick={() => setOpenDropdown(null)}
+            className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+            style={{ width: '100%', maxWidth: 600 }}
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(null); }}
           >
-            <div className="px-4 py-3 bg-[#2445b5] text-white flex items-center justify-between rounded-t-md">
-              <div className="flex items-center gap-3">
-                <div className="hidden">
-                  <ArrowUpDown className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold tracking-wide">ORDENAMIENTO</h3>
-                  <p className="hidden">
-                    {draftSortLevels.length === 0
-                      ? 'Sin criterios activos'
-                      : draftSortLevels.length + ' criterio' + (draftSortLevels.length === 1 ? '' : 's') + ' configurado' + (draftSortLevels.length === 1 ? '' : 's')}
-                  </p>
-                </div>
-              </div>
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <ArrowUpDown className="w-4 h-4 text-blue-200" />
+                Ordenamiento
+              </h3>
               <button
                 onClick={() => setShowModalOrdenar(false)}
-                className="h-7 w-7 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
                 title="Cerrar"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <button onClick={addSortLevel} className="h-9 px-4 flex items-center justify-center gap-2 rounded bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700 transition-colors">
-                  <Plus className="w-5 h-5" />
-                  Agregar
-                </button>
-                <button onClick={deleteSortLevel} disabled={!selectedSortLevelId} className="h-9 px-4 flex items-center justify-center gap-2 rounded border border-slate-300 bg-white text-slate-700 text-base font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
-                  <Trash2 className="w-5 h-5 text-red-500" />
-                  Eliminar
-                </button>
-                <button onClick={copySortLevel} disabled={draftSortLevels.length === 0} className="h-9 px-4 flex items-center justify-center gap-2 rounded border border-slate-300 bg-white text-slate-700 text-base font-semibold hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed">
-                  <Copy className="w-5 h-5 text-slate-500" />
-                  Copiar
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => moveSortLevel(-1)} disabled={!selectedSortLevelId} className="h-9 w-9 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Subir nivel">
-                    <ChevronUp className="w-5 h-5 text-blue-700" />
-                  </button>
-                  <button onClick={() => moveSortLevel(1)} disabled={!selectedSortLevelId} className="h-9 w-9 rounded border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center" title="Bajar nivel">
-                    <ChevronDown className="w-5 h-5 text-blue-700" />
-                  </button>
-                </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5 bg-slate-50 space-y-4">
                 
-              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Criterios de ordenamiento ({draftSortLevels.length})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={deleteSortLevel} disabled={!selectedSortLevelId} className="h-8 px-3 flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Eliminar
+                    </button>
+                    <button onClick={addSortLevel} className="h-8 px-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#1e40af] text-white text-xs font-semibold hover:bg-blue-800 transition-colors shadow-sm">
+                      <Plus className="w-3.5 h-3.5" />
+                      Agregar
+                    </button>
+                  </div>
+                </div>
 
-              <div>
                 {draftSortLevels.length === 0 ? (
-                  <div className="h-32 rounded-md border border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
-                    <div className="h-7 w-7 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700">
-                      <ArrowUpDown className="w-5 h-5" />
+                  <div className="h-32 rounded-xl border-2 border-dashed border-slate-200 bg-white flex flex-col items-center justify-center gap-2 px-3 text-center transition-colors">
+                    <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                      <ArrowUpDown className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Sin ordenamiento configurado</p>
-                      <p className="text-xs text-slate-500 mt-1">Agrega un nivel para ordenar la tabla.</p>
+                      <p className="text-sm font-bold text-slate-700">Sin ordenamiento configurado</p>
+                      <p className="text-[11px] text-slate-500 mt-1">Haz clic en Agregar para definir un criterio.</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1 max-h-[352px] overflow-y-auto pr-1" onScroll={() => setOpenDropdown(null)}>
+                  <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1" onScroll={() => setOpenDropdown(null)}>
                     {draftSortLevels.map((level, index) => {
                       const column = getSortColumn(level.column);
                       const selected = selectedSortLevelId === level.id;
@@ -3393,18 +3151,18 @@ export default function CumplimientosExcel({
                       return (
                         <div
                           key={level.id}
-                          onClick={() => setSelectedSortLevelId(level.id)}
-                          className={`rounded border p-1.5 transition-colors ${selected ? 'border-blue-500 bg-blue-50/70 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                          onClick={(e) => { e.stopPropagation(); setSelectedSortLevelId(level.id); }}
+                          className={`rounded-md border p-1.5 transition-colors cursor-pointer ${selected ? 'border-[#1e40af] bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-[#1e40af]/50 hover:shadow-sm'}`}
                         >
                           <div className="flex items-center mb-1">
-                            <span className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wide">
+                            <span className="text-[8px] font-bold text-[#1e40af] uppercase tracking-wider bg-blue-100/50 px-1 py-0.5 rounded">
                               {index === 0 ? 'Ordenar por' : 'Luego por'}
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-[240px_minmax(0,1fr)] gap-2 items-end">
+                          <div className="grid grid-cols-2 gap-1.5 items-end">
                             <div className="relative">
-                              <p className="text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wide">Columna</p>
+                              <p className="text-[8px] font-bold text-slate-500 mb-0.5 uppercase tracking-wide">Columna</p>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -3417,27 +3175,27 @@ export default function CumplimientosExcel({
                                   });
                                   setOpenDropdown(openDropdown === `col-${level.id}` ? null : `col-${level.id}`);
                                 }}
-                                className="h-7 w-full pl-2 pr-6 border border-slate-300 hover:border-blue-400 rounded bg-white text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative"
+                                className="h-7 w-full pl-2 pr-6 border border-slate-200 rounded text-[10px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#1e40af]/30 focus:border-[#1e40af] flex items-center justify-between text-left relative transition-all bg-white"
                               >
                                 <span className="truncate">{column.label}</span>
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </button>
                               {openDropdown === `col-${level.id}` && dropdownCoords && createPortal(
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: `${dropdownCoords.top}px`,
+                                    top: `${dropdownCoords.top + 2}px`,
                                     left: `${dropdownCoords.left}px`,
                                     width: `${dropdownCoords.width}px`,
                                     zIndex: 999999
                                   }}
-                                  className="bg-white border border-slate-200 rounded shadow-xl max-h-56 overflow-y-auto py-1 ring-1 ring-black/5"
+                                  className="bg-white border border-slate-200 rounded-md shadow-xl max-h-48 overflow-y-auto py-1 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {SORT_COLUMNS.map((option) => (
                                     <div
                                       key={option.key}
-                                      className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.column === option.key ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                      className={`px-2 py-1 text-[10px] cursor-pointer transition-colors ${level.column === option.key ? 'bg-blue-50 text-[#1e40af] font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'}`}
                                       onClick={() => {
                                         updateSortLevel(level.id, { column: option.key });
                                         setOpenDropdown(null);
@@ -3452,7 +3210,7 @@ export default function CumplimientosExcel({
                             </div>
 
                             <div className="relative">
-                              <p className="text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wide">Orden</p>
+                              <p className="text-[8px] font-bold text-slate-500 mb-0.5 uppercase tracking-wide">Orden</p>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -3465,25 +3223,25 @@ export default function CumplimientosExcel({
                                   });
                                   setOpenDropdown(openDropdown === `order-${level.id}` ? null : `order-${level.id}`);
                                 }}
-                                className="h-7 w-full pl-2 pr-6 border border-slate-300 hover:border-blue-400 rounded bg-white text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex items-center justify-between text-left relative"
+                                className="h-7 w-full pl-2 pr-6 border border-slate-200 rounded text-[10px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#1e40af]/30 focus:border-[#1e40af] flex items-center justify-between text-left relative transition-all bg-white"
                               >
                                 <span className="truncate">{getSortOrderLabel(column, level.direction)}</span>
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </button>
                               {openDropdown === `order-${level.id}` && dropdownCoords && createPortal(
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: `${dropdownCoords.top}px`,
+                                    top: `${dropdownCoords.top + 2}px`,
                                     left: `${dropdownCoords.left}px`,
                                     width: `${dropdownCoords.width}px`,
                                     zIndex: 999999
                                   }}
-                                  className="bg-white border border-slate-200 rounded shadow-xl py-1 ring-1 ring-black/5"
+                                  className="bg-white border border-slate-200 rounded-md shadow-xl py-1 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div
-                                    className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.direction === 'ASC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                    className={`px-2 py-1 text-[10px] cursor-pointer transition-colors ${level.direction === 'ASC' ? 'bg-blue-50 text-[#1e40af] font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'}`}
                                     onClick={() => {
                                       updateSortLevel(level.id, { direction: 'ASC' });
                                       setOpenDropdown(null);
@@ -3492,7 +3250,7 @@ export default function CumplimientosExcel({
                                     {getSortOrderLabel(column, 'ASC')}
                                   </div>
                                   <div
-                                    className={`px-3 py-1.5 text-xs cursor-pointer border-l-2 ${level.direction === 'DESC' ? 'bg-blue-50 text-blue-700 border-blue-600 font-semibold' : 'text-slate-700 hover:bg-slate-50 border-transparent'}`}
+                                    className={`px-2 py-1 text-[10px] cursor-pointer transition-colors ${level.direction === 'DESC' ? 'bg-blue-50 text-[#1e40af] font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'}`}
                                     onClick={() => {
                                       updateSortLevel(level.id, { direction: 'DESC' });
                                       setOpenDropdown(null);
@@ -3513,19 +3271,23 @@ export default function CumplimientosExcel({
               </div>
             </div>
 
-            <div className="px-4 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 rounded-b-md">
-              <button onClick={() => setShowModalOrdenar(false)} className="min-w-[135px] px-5 py-3 bg-white border border-slate-300 rounded text-base font-semibold hover:bg-slate-100">Cancelar</button>
-              <button onClick={applySortLevels} className="min-w-[150px] px-5 py-3 bg-[#2445b5] text-white rounded text-base font-bold hover:bg-blue-800">Aplicar</button>
+            <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+              <button onClick={applySortLevels} className="w-full px-4 py-2.5 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors shadow-sm">
+                Aplicar Orden
+              </button>
             </div>
           </div>
         </div>
       , document.body)}
       {/* MODAL AGREGAR NUEVOS EXPEDIENTES POR RANGO */}
       {showModalAgregar && createPortal(
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 md:p-6 border-b border-border flex items-center justify-between bg-[#1e40af] text-white rounded-t-lg">
-              <h3 className="text-sm md:text-base font-bold">Agregar Nuevos Expedientes por Rango</h3>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200" style={{ width: '100%', maxWidth: 640 }}>
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-blue-200" />
+                Agregar Nuevos Expedientes por Rango
+              </h3>
               <button
                 onClick={() => {
                   setShowModalAgregar(false);
@@ -3535,166 +3297,154 @@ export default function CumplimientosExcel({
                   setResultadoAgregar(null);
                   setErrorAgregar('');
                 }}
-                className="p-1.5 hover:bg-blue-700 rounded transition-colors"
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 md:p-6 space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-[11px] md:text-xs text-blue-800">
-                  <strong>Instrucción:</strong> Seleccione un archivo Excel con expedientes y defina el rango de fechas de ejecutoria para filtrar los expedientes que desea agregar al listado CUMPLIMIENTOS.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-2">Archivo SENTENCIAS</label>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xlsm,.xls"
-                    onChange={(e) => {
-                      setArchivoAgregar(e.target.files?.[0] || null);
-                      setResultadoAgregar(null);
-                      setErrorAgregar('');
-                    }}
-                    className="hidden"
-                  />
-                  <span className="inline-block w-full px-4 py-2.5 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-center border border-border text-xs">
-                    {archivoAgregar ? archivoAgregar.name : 'Seleccionar Archivo Excel'}
-                  </span>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium mb-2">Fecha Inicial de Ejecutoria</label>
-                  <input
-                    type="date"
-                    value={fechaInicial}
-                    onChange={(e) => setFechaInicial(e.target.value)}
-                    className="w-full px-3 py-2 bg-input-background border border-input rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-2">Fecha Final de Ejecutoria</label>
-                  <input
-                    type="date"
-                    value={fechaFinal}
-                    onChange={(e) => setFechaFinal(e.target.value)}
-                    className="w-full px-3 py-2 bg-input-background border border-input rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-
-              {archivoAgregar && fechaInicial && fechaFinal && !resultadoAgregar && (
-                <div className="bg-card rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold mb-2">Criterios del proceso</h4>
-                  <p className="text-[11px] text-muted-foreground">
-                    Se procesara la hoja SENTENCIAS, solo expedientes con AMPARA = SI,
-                    ACUMULADO distinto de SI y fecha de ejecutoria dentro del rango seleccionado.
-                  </p>
-                </div>
-              )}
-
-              {false && archivoAgregar && fechaInicial && fechaFinal && !resultadoAgregar && (
-                <div className="bg-card rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold mb-3">
-                    Vista Previa - Expedientes en Rango ({fechaInicial} a {fechaFinal})
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[11px]">
-                      <thead className="bg-muted/50 border-b border-border">
-                        <tr>
-                          <th className="px-2 py-2 text-left font-semibold">N° Juicio</th>
-                          <th className="px-2 py-2 text-left font-semibold">Materia</th>
-                          <th className="px-2 py-2 text-left font-semibold">Fecha Ejecutoria</th>
-                          <th className="px-2 py-2 text-left font-semibold">Incluir</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {[1, 2, 3, 4].map((i) => (
-                          <tr key={i} className="hover:bg-muted/30">
-                            <td className="px-2 py-2">{200 + i}/2024</td>
-                            <td className="px-2 py-2">TRABAJO</td>
-                            <td className="px-2 py-2">{fechaInicial}</td>
-                            <td className="px-2 py-2">
-                              <CheckCircle className="w-3 h-3 text-green-500" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+                
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                  <Info className="w-5 h-5 text-[#1e40af] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">Instrucción</span>
+                    <p className="text-xs text-slate-600">Seleccione un archivo Excel con expedientes y defina el rango de fechas de ejecutoria para filtrar los expedientes que desea agregar al listado CUMPLIMIENTOS.</p>
                   </div>
                 </div>
-              )}
 
-              {resultadoAgregar && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-xs font-semibold text-green-900 mb-2">
-                        Expedientes Agregados al Listado CUMPLIMIENTOS
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoAgregar.total}</p>
-                          <p className="text-[10px] text-green-700">Procesados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoAgregar.nuevos}</p>
-                          <p className="text-[10px] text-green-700">Insertados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoAgregar.duplicados}</p>
-                          <p className="text-[10px] text-green-700">Duplicados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoAgregar.omitidos}</p>
-                          <p className="text-[10px] text-green-700">Omitidos</p>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Archivo Sentencias</label>
+                  <label className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-all hover:border-[#1e40af] hover:bg-blue-50">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xlsm,.xls"
+                      onChange={(e) => {
+                        setArchivoAgregar(e.target.files?.[0] || null);
+                        setResultadoAgregar(null);
+                        setErrorAgregar('');
+                      }}
+                      className="hidden"
+                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="rounded-lg bg-slate-100 p-3"><FileSpreadsheet className="w-6 h-6 text-slate-500" /></div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-slate-700">{archivoAgregar ? archivoAgregar.name : 'Seleccionar Archivo Excel'}</p>
+                        <p className="text-xs text-slate-500 mt-1">{archivoAgregar ? `${(archivoAgregar.size / 1024).toFixed(2)} KB` : 'Haz clic para seleccionar un archivo .xlsx o .xls'}</p>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Inicial de Ejecutoria</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="date"
+                        value={fechaInicial}
+                        onChange={(e) => setFechaInicial(e.target.value)}
+                        className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Final de Ejecutoria</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="date"
+                        value={fechaFinal}
+                        onChange={(e) => setFechaFinal(e.target.value)}
+                        className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {archivoAgregar && fechaInicial && fechaFinal && !resultadoAgregar && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Criterios del proceso</h4>
+                      <p className="text-xs text-slate-600">
+                        Se procesara la hoja SENTENCIAS, solo expedientes con AMPARA = SI,
+                        ACUMULADO distinto de SI y fecha de ejecutoria dentro del rango seleccionado.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {resultadoAgregar && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-emerald-900 mb-3">
+                          Expedientes Agregados al Listado CUMPLIMIENTOS
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
+                            <p className="text-2xl font-bold text-emerald-700">{resultadoAgregar.total}</p>
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Procesados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
+                            <p className="text-2xl font-bold text-emerald-700">{resultadoAgregar.nuevos}</p>
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Insertados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
+                            <p className="text-2xl font-bold text-emerald-700">{resultadoAgregar.duplicados}</p>
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Duplicados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
+                            <p className="text-2xl font-bold text-emerald-700">{resultadoAgregar.omitidos}</p>
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Omitidos</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {errorAgregar && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-[11px] font-medium text-red-800">{errorAgregar}</p>
+                {errorAgregar && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="block text-[11px] font-bold text-red-700 uppercase tracking-wider mb-1">Error de procesamiento</span>
+                      <p className="text-xs text-red-600">{errorAgregar}</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="p-4 md:p-6 border-t border-border bg-gray-50 rounded-b-lg flex gap-3">
-              {!resultadoAgregar ? (
-                <button
-                  onClick={handleBuscarExpedientes}
-                  disabled={!archivoAgregar || !fechaInicial || !fechaFinal || agregandoExpedientes}
-                  className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {agregandoExpedientes ? 'Procesando...' : 'Agregar al Listado CUMPLIMIENTOS'}
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    setShowModalAgregar(false);
-                    setArchivoAgregar(null);
-                    setFechaInicial('');
-                    setFechaFinal('');
-                    setResultadoAgregar(null);
-                    setErrorAgregar('');
-                  }}
-                  className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-xs"
-                >
-                  Cerrar
-                </button>
-              )}
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+                {!resultadoAgregar ? (
+                  <button
+                    onClick={handleBuscarExpedientes}
+                    disabled={!archivoAgregar || !fechaInicial || !fechaFinal || agregandoExpedientes}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {agregandoExpedientes ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {agregandoExpedientes ? 'Procesando...' : 'Agregar al Listado CUMPLIMIENTOS'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setShowModalAgregar(false);
+                      setArchivoAgregar(null);
+                      setFechaInicial('');
+                      setFechaFinal('');
+                      setResultadoAgregar(null);
+                      setErrorAgregar('');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors shadow-sm"
+                  >
+                    Cerrar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>, document.body
@@ -3702,10 +3452,13 @@ export default function CumplimientosExcel({
 
       {/* MODAL ACTUALIZAR DESDE SENTENCIAS */}
       {showModalActualizar && createPortal(
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-[99999] flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 md:p-6 border-b border-border flex items-center justify-between bg-[#1e40af] text-white rounded-t-lg">
-              <h3 className="text-sm md:text-base font-bold">Actualizar desde SENTENCIAS</h3>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200" style={{ width: '100%', maxWidth: 640 }}>
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-blue-200" />
+                Actualizar desde SENTENCIAS
+              </h3>
               <button
                 onClick={() => {
                   setShowModalActualizar(false);
@@ -3713,161 +3466,139 @@ export default function CumplimientosExcel({
                   setValidado(false);
                   setResultadoActualizar(null);
                 }}
-                className="p-1.5 hover:bg-blue-700 rounded transition-colors"
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 md:p-6 space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-[11px] md:text-xs text-blue-800">
-                  <strong>Instrucción:</strong> Seleccione un archivo Excel actualizado de SENTENCIAS. El sistema comparará con los expedientes existentes en CUMPLIMIENTOS y actualizará los datos que hayan cambiado.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-2">Archivo SENTENCIAS Actualizado</label>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      setArchivoActualizar(e.target.files?.[0] || null);
-                      setValidado(false);
-                      setResultadoActualizar(null);
-                      setErrorActualizar('');
-                    }}
-                    className="hidden"
-                  />
-                  <span className="inline-block w-full px-4 py-2.5 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-center border border-border text-xs">
-                    {archivoActualizar ? archivoActualizar.name : 'Seleccionar Archivo Excel'}
-                  </span>
-                </label>
-              </div>
-
-              {errorActualizar && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-[11px] md:text-xs font-medium text-red-700">{errorActualizar}</p>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+                
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                  <Info className="w-5 h-5 text-[#1e40af] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">Instrucción</span>
+                    <p className="text-xs text-slate-600">Seleccione un archivo Excel actualizado de SENTENCIAS. El sistema comparará con los expedientes existentes en CUMPLIMIENTOS y actualizará los datos que hayan cambiado.</p>
+                  </div>
                 </div>
-              )}
 
-              {archivoActualizar && validado && !resultadoActualizar && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Archivo Sentencias Actualizado</label>
+                  <label className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 px-6 py-6 transition-all hover:border-[#1e40af] hover:bg-blue-50">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => {
+                        setArchivoActualizar(e.target.files?.[0] || null);
+                        setValidado(false);
+                        setResultadoActualizar(null);
+                        setErrorActualizar('');
+                      }}
+                      className="hidden"
+                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="rounded-lg bg-slate-100 p-3"><FileSpreadsheet className="w-6 h-6 text-slate-500" /></div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-slate-700">{archivoActualizar ? archivoActualizar.name : 'Seleccionar Archivo Excel'}</p>
+                        <p className="text-xs text-slate-500 mt-1">{archivoActualizar ? `${(archivoActualizar.size / 1024).toFixed(2)} KB` : 'Haz clic para seleccionar un archivo .xlsx o .xls'}</p>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {errorActualizar && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-semibold text-green-900 mb-1">Archivo validado</h4>
-                      <p className="text-[11px] md:text-xs text-green-800">
+                      <span className="block text-[11px] font-bold text-red-700 uppercase tracking-wider mb-1">Error de Validación</span>
+                      <p className="text-xs text-red-600">{errorActualizar}</p>
+                    </div>
+                  </div>
+                )}
+
+                {archivoActualizar && validado && !resultadoActualizar && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Archivo validado</h4>
+                      <p className="text-xs text-slate-600">
                         La hoja SENTENCIAS contiene el encabezado EXPEDIENTE y está lista para actualizar CUMPLIMIENTOS.
                       </p>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {false && archivoActualizar && validado && !resultadoActualizar && (
-                <div className="bg-card rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold mb-3">Vista Previa de Cambios Detectados</h4>
-                  <div className="space-y-2">
-                    {[
-                      { juicio: '639/2025', campo: 'Último Requerimiento', anterior: '10/02/2025', nuevo: '15/03/2025' },
-                      { juicio: '872/2022', campo: 'Días Hábiles', anterior: '595', nuevo: '602' },
-                      { juicio: '1839/2025', campo: 'Estatus', anterior: 'EN_PLAZO', nuevo: 'ATENCION' },
-                    ].map((cambio, index) => (
-                      <div key={index} className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-[11px] font-semibold text-yellow-900 mb-2">
-                              {cambio.juicio} - {cambio.campo}
-                            </p>
-                            <div className="grid grid-cols-2 gap-3 text-[10px]">
-                              <div>
-                                <p className="text-yellow-700 font-medium mb-1">Valor Anterior:</p>
-                                <p className="text-yellow-900 bg-white/50 rounded px-2 py-1">{cambio.anterior}</p>
-                              </div>
-                              <div>
-                                <p className="text-yellow-700 font-medium mb-1">Valor Nuevo:</p>
-                                <p className="text-yellow-900 bg-white/50 rounded px-2 py-1">{cambio.nuevo}</p>
-                              </div>
-                            </div>
+                {resultadoActualizar && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-emerald-900 mb-3">
+                          Actualización Completada en Listado CUMPLIMIENTOS
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <div className="bg-white rounded-lg p-2 border border-emerald-100 text-center">
+                            <p className="text-xl font-bold text-emerald-700">{resultadoActualizar.indexados}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Indexados</p>
                           </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {resultadoActualizar && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-xs font-semibold text-green-900 mb-2">
-                        Actualización Completada en Listado CUMPLIMIENTOS
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoActualizar.indexados}</p>
-                          <p className="text-[10px] text-green-700">Indexados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoActualizar.localizados}</p>
-                          <p className="text-[10px] text-green-700">Localizados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoActualizar.actualizados}</p>
-                          <p className="text-[10px] text-green-700">Actualizados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoActualizar.noLocalizados}</p>
-                          <p className="text-[10px] text-green-700">No Localizados</p>
-                        </div>
-                        <div>
-                          <p className="text-xl font-bold text-green-900">{resultadoActualizar.errores}</p>
-                          <p className="text-[10px] text-green-700">Errores</p>
+                          <div className="bg-white rounded-lg p-2 border border-emerald-100 text-center">
+                            <p className="text-xl font-bold text-emerald-700">{resultadoActualizar.localizados}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Localizados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-2 border border-emerald-100 text-center">
+                            <p className="text-xl font-bold text-emerald-700">{resultadoActualizar.actualizados}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Actualizados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-2 border border-emerald-100 text-center">
+                            <p className="text-xl font-bold text-emerald-700">{resultadoActualizar.noLocalizados}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mt-1">No Localizados</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-2 border border-emerald-100 text-center">
+                            <p className="text-xl font-bold text-emerald-700">{resultadoActualizar.errores}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Errores</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="p-4 md:p-6 border-t border-border bg-gray-50 rounded-b-lg flex gap-3">
-              {!validado && !resultadoActualizar && (
-                <button
-                  onClick={handleValidarArchivo}
-                  disabled={!archivoActualizar || actualizandoCumplimientos}
-                  className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Validar Archivo
-                </button>
-              )}
-              {validado && !resultadoActualizar && (
-                <button
-                  onClick={handleActualizarCumplimientos}
-                  disabled={actualizandoCumplimientos}
-                  className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {actualizandoCumplimientos ? 'Actualizando...' : 'Actualizar CUMPLIMIENTOS'}
-                </button>
-              )}
-              {resultadoActualizar && (
-                <button
-                  onClick={() => {
-                    setShowModalActualizar(false);
-                    setArchivoActualizar(null);
-                    setValidado(false);
-                    setResultadoActualizar(null);
-                  }}
-                  className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-xs"
-                >
-                  Cerrar
-                </button>
-              )}
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
+                {!validado && !resultadoActualizar && (
+                  <button
+                    onClick={handleValidarArchivo}
+                    disabled={!archivoActualizar || actualizandoCumplimientos}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    Validar Archivo
+                  </button>
+                )}
+                {validado && !resultadoActualizar && (
+                  <button
+                    onClick={handleActualizarCumplimientos}
+                    disabled={actualizandoCumplimientos}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {actualizandoCumplimientos ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {actualizandoCumplimientos ? 'Actualizando...' : 'Actualizar CUMPLIMIENTOS'}
+                  </button>
+                )}
+                {resultadoActualizar && (
+                  <button
+                    onClick={() => {
+                      setShowModalActualizar(false);
+                      setArchivoActualizar(null);
+                      setValidado(false);
+                      setResultadoActualizar(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors shadow-sm"
+                  >
+                    Cerrar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>, document.body

@@ -221,6 +221,9 @@ contextBridge.exposeInMainWorld('api', {
   updateUser: async (id, userData) => remoteSession
     ? await remoteRequest(`/api/usuarios/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(userData) })
     : ipcRenderer.invoke('users:update', id, userData),
+  deleteUser: async (id) => remoteSession
+    ? await remoteRequest(`/api/usuarios/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    : ipcRenderer.invoke('users:delete', id),
   listRoles: async () => remoteSession
     ? (await remoteRequest('/api/roles')).roles
     : ipcRenderer.invoke('roles:list'),
@@ -236,6 +239,9 @@ contextBridge.exposeInMainWorld('api', {
   updateRole: async (id, roleData) => remoteSession
     ? await remoteRequest(`/api/roles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(roleData) })
     : ipcRenderer.invoke('roles:update', id, roleData),
+  deleteRole: async (id) => remoteSession
+    ? await remoteRequest(`/api/roles/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    : ipcRenderer.invoke('roles:delete', id),
 
   // Mesas de trámite
   listMesas: async () => remoteSession

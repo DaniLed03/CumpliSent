@@ -1186,82 +1186,65 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
 
       {/* Reassign Mesa Modal */}
       {showReassignModal && (
-        <div className="user-form-overlay" onClick={() => setShowReassignModal(false)}>
-          <div className="user-form-modal module-modal-shell max-w-3xl animate-scaleIn" onClick={(e) => e.stopPropagation()}>
-            <div className="module-modal-header">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
-                  <Edit className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="module-modal-title">Reasignar mesa</h3>
-                  <p className="text-[11px] font-medium text-blue-100">Busca un expediente y selecciona la nueva mesa de trámite.</p>
-                </div>
-              </div>
-              <button onClick={() => setShowReassignModal(false)} className="p-1 hover:bg-blue-700 rounded-md transition-colors">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={() => setShowReassignModal(false)}>
+          <div
+            className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 640 }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                <Edit className="w-4 h-4 text-blue-200" />
+                Reasignar Mesa
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowReassignModal(false)}
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleReassignSubmit}>
-              <div className="module-modal-body space-y-4 bg-slate-50">
-                <div
-                  className="relative w-full overflow-visible rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                  style={{ zIndex: 100000, isolation: 'isolate' }}
-                >
-                  <label className="module-label">Buscar Expediente (Juicio)</label>
-                  <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Escribe el No. de Juicio o Expediente..."
-                      value={reassignSearch}
-                      onChange={(e) => {
-                        setReassignSearch(e.target.value);
+            <form onSubmit={handleReassignSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+                
+                {/* Buscar Expediente */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Buscar Expediente (Juicio)</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      value={reassignSearch} 
+                      onChange={(e) => { 
+                        setReassignSearch(e.target.value); 
                         if (selectedExpediente) {
                           setSelectedExpediente(null);
                           setTargetMesaId('');
                           setShowTargetMesaCombo(false);
                           setReassignMotivo('');
                         }
-                      }}
-                    className="h-[65px] w-full rounded-lg border border-slate-200 bg-white pr-8 text-lg font-normal text-slate-700 shadow-sm outline-none ring-0 transition-colors placeholder:font-normal placeholder:text-slate-300 hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus-visible:outline-none"
-                      style={{
-                        paddingLeft: 48,
-                        outline: 'none',
-                        boxShadow: 'none',
-                      }}
-                      autoFocus
+                      }} 
+                      placeholder="Escribe el No. de Juicio o Expediente..." 
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" 
+                      required 
                     />
                     {reassignFiltered.length > 0 && !selectedExpediente && (
-                      <div
-                        className="absolute left-0 right-0 top-full mt-1.5 overflow-y-auto rounded-xl border border-slate-200/80 bg-white py-1 shadow-xl ring-1 ring-black/5"
-                        style={{
-                          height: 160,
-                          maxHeight: 160,
-                          scrollbarGutter: 'stable',
-                          zIndex: 100001,
-                        }}
-                      >
-                        {reassignFiltered.map((exp, idx) => (
-                          <button
-                            key={exp.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedExpediente(exp);
-                              setReassignSearch(exp.numeroJuicio);
-                              setTargetMesaId(exp.idMesa ? String(exp.idMesa) : '');
-                              setReassignMotivo(exp.observacionesMesa || '');
-                            }}
-                            className={`flex w-full items-center justify-between gap-4 border-l-2 px-4 text-left text-sm transition-colors ${
-                              idx === 0
-                                ? 'border-blue-600 bg-blue-50 font-semibold text-blue-700'
-                                : 'border-transparent text-slate-700 hover:bg-slate-50'
-                            }`}
-                            style={{ height: 38, minHeight: 38 }}
+                      <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                        {reassignFiltered.map((exp) => (
+                          <button 
+                            key={exp.id} 
+                            type="button" 
+                            onClick={() => { 
+                              setSelectedExpediente(exp); 
+                              setReassignSearch(exp.numeroJuicio); 
+                              setTargetMesaId(exp.idMesa ? String(exp.idMesa) : ''); 
+                              setReassignMotivo(exp.observacionesMesa || ''); 
+                            }} 
+                            className="flex w-full items-center justify-between gap-4 px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-blue-50 hover:text-[#1e40af]"
                           >
                             <span className="font-semibold">{exp.numeroJuicio}</span>
-                            <span className="rounded-md bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
+                            <span className="text-xs text-slate-500">
                               Mesa: {mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.MESA || 'Ninguna'}
                             </span>
                           </button>
@@ -1271,121 +1254,66 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                   </div>
                 </div>
 
-                <div className="relative rounded-xl border border-blue-100 bg-blue-50 p-4 shadow-sm" style={{ zIndex: 1 }}>
-                    <div
-                      className="mb-4 grid gap-3 text-xs"
-                      style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
-                    >
-                      <div className="rounded-lg bg-white p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-500">Orden</p>
-                        <p className="mt-1 font-bold text-slate-900">{selectedExpediente?.numeroOrden || '—'}</p>
-                      </div>
-                      <div className="rounded-lg bg-white p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-500">Juicio / Expediente</p>
-                        <p className="mt-1 font-bold text-blue-700">{selectedExpediente?.numeroJuicio || '—'}</p>
-                      </div>
-                      <div className="rounded-lg bg-white p-3">
-                        <p className="text-[10px] font-bold uppercase text-slate-500">Mesa actual</p>
-                        <p className="mt-1 font-bold text-slate-900">
-                          {selectedExpediente ? (mesas.find(m => Number(m.ID_MESA) === Number(selectedExpediente.idMesa))?.MESA || 'Sin mesa asignada') : '—'}
-                        </p>
-                      </div>
+                {/* Static Info Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Orden</span>
+                      <span className="text-xs font-semibold text-slate-700">{selectedExpediente?.numeroOrden || '-'}</span>
                     </div>
-
-                    <div className="space-y-4">
-                      <div className="module-field">
-                        <label className="module-label">Seleccionar Nueva Mesa</label>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setShowTargetMesaCombo((open) => !open)}
-                            className={`flex min-h-[50px] w-full items-center justify-between rounded-lg border bg-white px-4 py-3 text-left text-sm shadow-sm transition-colors focus:outline-none ${
-                              showTargetMesaCombo ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'
-                            }`}
-                          >
-                            <span className={targetMesaId ? 'font-semibold text-slate-800' : 'text-slate-400'}>
-                              {targetMesaId
-                                ? (() => {
-                                    const mesa = mesas.find(m => String(m.ID_MESA) === targetMesaId);
-                                    return mesa ? `${mesa.MESA} - ${mesa.NOMBRE || 'Sin encargado'}` : 'Seleccione una mesa...';
-                                  })()
-                                : 'Seleccione una mesa...'}
-                            </span>
-                            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showTargetMesaCombo ? 'rotate-180' : ''}`} />
-                          </button>
-
-                          {showTargetMesaCombo && (
-                            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-b-lg border border-slate-200 bg-white py-0 shadow-xl">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTargetMesaId('');
-                                  setShowTargetMesaCombo(false);
-                                }}
-                                className={`flex min-h-[48px] w-full items-center px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                                  !targetMesaId ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-blue-50'
-                                }`}
-                              >
-                                Seleccione una mesa...
-                              </button>
-                              {mesas.filter(m => m.ACTIVO === 1 || Number(m.ID_MESA) === Number(selectedExpediente?.idMesa)).map(m => (
-                                <button
-                                  key={m.ID_MESA}
-                                  type="button"
-                                  onClick={() => {
-                                    setTargetMesaId(String(m.ID_MESA));
-                                    setShowTargetMesaCombo(false);
-                                  }}
-                                  className={`flex min-h-[48px] w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors ${
-                                    String(m.ID_MESA) === targetMesaId
-                                      ? 'bg-blue-50 font-bold text-blue-700'
-                                      : 'text-slate-700 hover:bg-blue-50'
-                                  }`}
-                                >
-                                  <span>{m.MESA}</span>
-                                  <span className="truncate text-xs text-slate-500">{m.NOMBRE || 'Sin encargado'}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="module-field">
-                        <label className="module-label">Motivo u observaciones</label>
-                        <textarea
-                          value={reassignMotivo}
-                          onChange={(e) => setReassignMotivo(e.target.value)}
-                          className="w-full resize-none rounded-lg border border-slate-200 bg-white p-4 text-sm outline-none focus:border-slate-200 focus:outline-none focus:ring-0"
-                          style={{
-                            height: 260,
-                            minHeight: 260,
-                            resize: 'none',
-                            outline: 'none',
-                            boxShadow: 'none',
-                          }}
-                          placeholder="Escribe el motivo del cambio..."
-                          required
-                        />
-                      </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Juicio/Exp</span>
+                      <span className="text-[13px] font-bold text-[#1e40af]">{selectedExpediente?.numeroJuicio || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mesa Actual</span>
+                      <span className="text-xs font-semibold text-slate-700">{selectedExpediente ? (mesas.find(m => Number(m.ID_MESA) === Number(selectedExpediente.idMesa))?.MESA || 'Sin mesa') : '-'}</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Nueva Mesa */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Seleccionar Nueva Mesa</label>
+                  <div className="relative">
+                    <select 
+                      value={targetMesaId} 
+                      onChange={(e) => setTargetMesaId(e.target.value)} 
+                      className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm" 
+                      required
+                    >
+                      <option value="">Seleccione una mesa...</option>
+                      {mesas.filter(m => m.ACTIVO === 1 || Number(m.ID_MESA) === Number(selectedExpediente?.idMesa)).map(m => (
+                        <option key={m.ID_MESA} value={m.ID_MESA}>{m.MESA} - {m.NOMBRE || 'Sin encargado'}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                      <ChevronDown className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Observaciones */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Motivo u Observaciones</label>
+                  <textarea 
+                    value={reassignMotivo} 
+                    onChange={(e) => setReassignMotivo(e.target.value)} 
+                    placeholder="Escribe el motivo del cambio..." 
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm placeholder:text-slate-300" 
+                    style={{ height: '100px' }}
+                    required 
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-                <button
-                  type="button"
-                  onClick={() => setShowReassignModal(false)}
-                  className="rounded-md bg-slate-100 px-5 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
-                >
-                  Cancelar
-                </button>
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
                 <button
                   type="submit"
                   disabled={reassignSaving || !selectedExpediente}
-                  className="flex items-center gap-1.5 rounded-md bg-[#1e40af] px-5 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
                 >
-                  {reassignSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  {reassignSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Guardar Reasignación
                 </button>
               </div>
@@ -1396,79 +1324,81 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
 
       {/* Create / Edit Mesa Modal */}
       {showMesaModal && (
-        <div className="user-form-overlay" onClick={() => setShowMesaModal(false)}>
-          <div className="user-form-modal module-modal-shell max-w-md animate-scaleIn" onClick={(e) => e.stopPropagation()}>
-            <div className="module-modal-header">
-              <h3 className="module-modal-title">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={() => setShowMesaModal(false)}>
+          <div
+            className="bg-white rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 512 }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 bg-[#1e40af] text-white rounded-t-xl shrink-0">
+              <h3 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
                 {editingMesa ? 'Editar Mesa de Trámite' : 'Nueva Mesa de Trámite'}
               </h3>
-              <button onClick={() => setShowMesaModal(false)} className="p-1 hover:bg-blue-700 rounded-md transition-colors">
+              <button
+                type="button"
+                onClick={() => setShowMesaModal(false)}
+                className="p-1 hover:bg-white/15 rounded-md transition-colors"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleMesaSubmit}>
-              <div className="module-modal-body space-y-4">
-                <div className="module-field">
-                  <label className="module-label">Mesa (Clave / Nombre)</label>
+            <form onSubmit={handleMesaSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-white">
+                
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Mesa (Clave / Nombre)</label>
                   <input
                     type="text"
                     value={formMesa}
                     onChange={(e) => setFormMesa(e.target.value)}
-                    className="module-input uppercase font-bold"
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 uppercase font-bold focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
                     placeholder="E.g. MESA I, MESA A, MESA 1"
                     required
                   />
                 </div>
 
-                <div className="module-field">
-                  <label className="module-label">Nombre del Responsable / Encargado</label>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre del Responsable / Encargado</label>
                   <input
                     type="text"
                     value={formNombre}
                     onChange={(e) => setFormNombre(e.target.value)}
-                    className="module-input"
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm"
                     placeholder="Nombre completo"
                   />
                 </div>
 
                 {editingMesa && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
                     <input
                       type="checkbox"
                       id="form-activo-mesa"
                       checked={formActivo}
                       onChange={(e) => setFormActivo(e.target.checked)}
-                      className="w-4 h-4 rounded border-input text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 rounded border-slate-300 text-[#1e40af] focus:ring-[#1e40af]"
                     />
-                    <label htmlFor="form-activo-mesa" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                    <label htmlFor="form-activo-mesa" className="text-[11px] font-bold text-slate-700 cursor-pointer uppercase tracking-wider">
                       Mesa activa para asignaciones automáticas
                     </label>
                   </div>
                 )}
 
                 {modalError && (
-                  <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-100 rounded-lg text-red-700 text-[10px]">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="flex items-center gap-2 p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-semibold shadow-sm">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     <span>{modalError}</span>
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setShowMesaModal(false)}
-                  className="px-5 py-2 bg-slate-100 text-slate-700 rounded-md text-xs font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
+              <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0">
                 <button
                   type="submit"
                   disabled={savingMesa}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#1e40af] text-white rounded-md text-xs font-bold hover:bg-blue-800 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e40af] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 shadow-sm"
                 >
-                  {savingMesa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  {savingMesa ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Guardar Mesa
                 </button>
               </div>

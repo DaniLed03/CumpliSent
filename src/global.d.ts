@@ -117,6 +117,7 @@ declare global {
         Password: string;
         IdRol?: number;
         NombreCompleto?: string;
+        IdMesa?: number | null;
       }) => Promise<{ ok: boolean; IdUsuario?: number; error?: string }>;
       updateUser: (
         id: number,
@@ -127,6 +128,7 @@ declare global {
           Password?: string;
         },
       ) => Promise<{ ok: boolean; error?: string }>;
+      deleteUser: (id: number) => Promise<{ ok: boolean; error?: string }>;
       listRoles: () => Promise<RoleRecord[]>;
       listPermissions: () => Promise<PermissionRecord[]>;
       listRolesWithPermissions: () => Promise<RoleWithPermissionsRecord[]>;
@@ -141,6 +143,7 @@ declare global {
           Permisos?: string[];
         },
       ) => Promise<{ ok: boolean; error?: string }>;
+      deleteRole: (id: number) => Promise<{ ok: boolean; error?: string }>;
 
       // Mesas de tramite & Trabajo diario
       listMesas: () => Promise<any[]>;
@@ -154,6 +157,10 @@ declare global {
       reassignMesa: (data: any) => Promise<any>;
       getAssignmentHistory: (filters: any) => Promise<any>;
       getExpedientesAllMesas: () => Promise<any>;
+      getExpedientesByMesa: (idMesa: number | string) => Promise<any>;
+      getHistorialTrabajoDiario: (filters: any) => Promise<any>;
+      captureTrabajoDiario: (data: any) => Promise<any>;
+      flushTrabajoDiarioToHistory: () => Promise<any>;
     };
   }
 

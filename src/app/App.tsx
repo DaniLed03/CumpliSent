@@ -8,7 +8,6 @@ import {
   CircleHelp,
   Edit,
   FileText,
-  LayoutDashboard,
   Download,
   Loader2,
   LogOut,
@@ -52,7 +51,6 @@ interface DiaInhabil {
 }
 
 type ViewKey =
-  | "dashboard"
   | "cumplimientos"
   | "procesar"
   | "dias-inhabiles"
@@ -63,7 +61,6 @@ type ViewKey =
   | "trabajo-diario";
 
 const VIEW_TITLES: Record<ViewKey, string> = {
-  dashboard: "Dashboard",
   cumplimientos: "Cumplimientos",
   procesar: "Normalización de la información",
   "dias-inhabiles": "Días inhábiles",
@@ -75,7 +72,6 @@ const VIEW_TITLES: Record<ViewKey, string> = {
 };
 
 const VIEW_PERMISSIONS: Record<ViewKey, string> = {
-  dashboard: "view.dashboard",
   cumplimientos: "view.cumplimientos",
   procesar: "view.procesar",
   "dias-inhabiles": "view.dias_inhabiles",
@@ -143,85 +139,6 @@ function NavItem({
   );
 }
 
-function DashboardView({
-  expedientes,
-  diasInhabiles,
-}: {
-  expedientes: Expediente[];
-  diasInhabiles: DiaInhabil[];
-}) {
-  const stats = useMemo(() => {
-    const byBand = (label: string) =>
-      expedientes.filter(
-        (exp) =>
-          bandFromStatus(exp.estatus, exp.diasHabilesTranscurridos) === label,
-      ).length;
-    return {
-      total: expedientes.length,
-      enPlazo: byBand("En plazo"),
-      atencion: byBand("Atención"),
-      requerir: byBand("Requerir"),
-      vencido: byBand("Vencido"),
-      noLocalizados: expedientes.filter((exp) => !exp.localizado).length,
-    };
-  }, [expedientes]);
-
-  const cards = [
-    [
-      "Total expedientes",
-      stats.total,
-      "bg-blue-50 text-blue-700 border-blue-100",
-    ],
-    [
-      "En plazo",
-      stats.enPlazo,
-      "bg-emerald-50 text-emerald-700 border-emerald-100",
-    ],
-    ["Atención", stats.atencion, "bg-amber-50 text-amber-700 border-amber-100"],
-    ["Requerir", stats.requerir, "bg-rose-50 text-rose-700 border-rose-100"],
-    ["Vencidos", stats.vencido, "bg-red-50 text-red-700 border-red-100"],
-    [
-      "Días inhábiles",
-      diasInhabiles.length,
-      "bg-slate-50 text-slate-700 border-slate-100",
-    ],
-  ] as const;
-
-  return (
-    <div className="h-full min-h-0 overflow-auto space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {cards.map(([label, value, className]) => (
-          <div key={label} className={`rounded-lg border p-4 ${className}`}>
-            <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-              {label}
-            </p>
-            <p className="text-3xl font-bold mt-2">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-lg border border-border bg-card p-4">
-        <h3 className="font-semibold mb-3">Actualizados recientemente</h3>
-        <div className="space-y-2 text-sm">
-          {expedientes
-            .filter((exp) => exp.actualizado)
-            .slice(0, 10)
-            .map((exp) => (
-              <div
-                key={exp.id}
-                className="flex items-center justify-between gap-3 border-b border-border/50 pb-2"
-              >
-                <span className="font-medium truncate">{exp.numeroJuicio}</span>
-                <span className="text-muted-foreground">
-                  {formatDate(exp.actualizado)}
-                </span>
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 type SentenciasResult = {
   sheetName: string;
@@ -836,27 +753,32 @@ function DiasInhabilesView({
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-4">
+    <div className="h-full min-h-0 flex flex-col gap-5 p-2">
       {canManage && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-shrink-0">
-          <div className="bg-card rounded-lg border border-border p-4 min-w-0">
-            <h3 className="font-semibold mb-3">
-              Agregar Día Inhábil Manualmente
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 flex-shrink-0 items-start">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="font-bold text-sm text-slate-800 tracking-wide uppercase">
+                Agregar Día Inhábil Manualmente
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
               <div className="min-w-0">
                 <input
                   type="date"
                   value={nuevaFecha}
                   onChange={(e) => setNuevaFecha(e.target.value)}
-                  className="w-full px-3 py-2 bg-input-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
               <div className="flex items-end">
                 <button
                   onClick={handleAgregar}
                   disabled={!nuevaFecha}
-                  className="w-full md:w-auto px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full md:w-auto px-6 py-2 bg-[#1e40af] text-white rounded-lg hover:bg-blue-800 transition-all font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Agregar
                 </button>
@@ -864,15 +786,19 @@ function DiasInhabilesView({
             </div>
           </div>
 
-          <div className="bg-card rounded-lg border border-border p-4 min-w-0">
-            <div className="mb-3 space-y-1">
-              <h3 className="font-semibold text-xs text-slate-800">Importar desde Excel</h3>
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 text-[9px] px-2 py-1 rounded inline-block">
-                El sistema buscará automáticamente la columna "DÍAS INHÁBILES" en el archivo Excel y procesará las fechas encontradas.
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 relative">
+
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-emerald-600" />
               </div>
+              <h3 className="font-bold text-sm text-slate-800 tracking-wide uppercase">
+                Importar desde Excel
+              </h3>
             </div>
+            
             <div className="space-y-3">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <label className="cursor-pointer flex-1 min-w-0">
                   <input
                     type="file"
@@ -884,25 +810,25 @@ function DiasInhabilesView({
                     }}
                     className="hidden"
                   />
-                  <span className="inline-block w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-center text-sm border border-border truncate">
+                  <span className="inline-block w-full px-4 py-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors text-center text-sm font-semibold border border-slate-200 truncate">
                     {excelFile ? excelFile.name : "Seleccionar Archivo Excel"}
                   </span>
                 </label>
                 <button
                   onClick={handleImportarExcel}
                   disabled={!excelFile || importingExcel}
-                  className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                 >
                   {importingExcel ? "Importando..." : "Importar"}
                 </button>
               </div>
               {importMessage && (
-                <p className="text-xs font-medium text-green-700">
+                <p className="text-[11px] font-bold text-emerald-600 px-1">
                   {importMessage}
                 </p>
               )}
               {importError && (
-                <p className="text-xs font-medium text-destructive">
+                <p className="text-[11px] font-bold text-red-600 px-1">
                   {importError}
                 </p>
               )}
@@ -913,60 +839,78 @@ function DiasInhabilesView({
 
 
       <div
-        className="bg-card rounded-lg border border-border p-4 md:col-span-2 flex-1 min-h-0 flex flex-col"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col overflow-hidden"
         style={{ gridColumn: "1 / -1", width: "100%" }}
       >
-        <h3 className="font-semibold mb-3 flex-shrink-0">
-          Días Inhábiles Registrados ({diasInhabiles.length})
-        </h3>
-        <div className="flex-1 min-h-0 overflow-auto border border-border/60 rounded-md">
-          <table className="w-full text-sm">
-            <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">
-                  DÍAS INHÁBILES
-                </th>
-                {canManage && (
-                  <th className="px-4 py-3 text-center font-semibold">
-                    Acciones
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 flex-shrink-0">
+          <h3 className="font-bold text-sm text-slate-800 tracking-wide uppercase flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+            Días Inhábiles Registrados
+          </h3>
+          <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+            {diasInhabiles.length} registros
+          </span>
+        </div>
+        <div className="flex-1 min-h-0 p-5 pt-4 flex flex-col">
+          <div className="rounded-xl border border-slate-200 overflow-auto shadow-sm flex-1 min-h-0">
+            <table className="w-full text-sm">
+              <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
+                <tr>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider">
+                    Días Inhábiles
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {diasInhabiles.map((dia, index) => (
-                <tr
-                  key={dia.id}
-                  className={index % 2 === 0 ? "bg-background" : "bg-muted/10"}
-                >
-                  <td className="px-4 py-3">{formatDate(dia.fecha)}</td>
                   {canManage && (
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setDiaEditando(dia);
-                            setFechaEditando(dia.fecha);
-                          }}
-                          className="p-1.5 hover:bg-primary/10 text-primary rounded transition-colors"
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEliminar(dia)}
-                          className="p-1.5 hover:bg-destructive/10 text-destructive rounded transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+                    <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider w-32">
+                      Acciones
+                    </th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {diasInhabiles.length === 0 ? (
+                  <tr>
+                    <td colSpan={canManage ? 2 : 1} className="px-5 py-8 text-center text-slate-500 bg-slate-50/50">
+                      No hay días inhábiles registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  diasInhabiles.map((dia, index) => (
+                    <tr
+                      key={dia.id}
+                      className={`hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}
+                    >
+                      <td className="px-5 py-3 font-medium text-slate-700">
+                        {formatDate(dia.fecha)}
+                      </td>
+                      {canManage && (
+                        <td className="px-5 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setDiaEditando(dia);
+                                setFechaEditando(dia.fecha);
+                              }}
+                              className="w-8 h-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(dia)}
+                              className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1051,7 +995,7 @@ function DiasInhabilesView({
 }
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<ViewKey>("dashboard");
+  const [currentView, setCurrentView] = useState<ViewKey>("cumplimientos");
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [diasInhabiles, setDiasInhabiles] = useState<DiaInhabil[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1098,7 +1042,7 @@ export default function App() {
       const fallback =
         (Object.keys(VIEW_PERMISSIONS) as ViewKey[]).find((view) =>
           canView(view),
-        ) || "dashboard";
+        ) || "cumplimientos";
       setCurrentView(fallback);
     }
   }, [currentView, session]);
@@ -1112,7 +1056,6 @@ export default function App() {
   }
 
   const mainNavItems: Array<{ view: ViewKey; icon: React.ReactNode }> = [
-    { view: "dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { view: "cumplimientos", icon: <FileText className="w-4 h-4" /> },
     { view: "procesar", icon: <Upload className="w-4 h-4" /> },
     { view: "dias-inhabiles", icon: <Calendar className="w-4 h-4" /> },
@@ -1155,7 +1098,7 @@ export default function App() {
               <h1 className="text-xl font-black tracking-normal whitespace-nowrap">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
-                <span className="ml-1 text-black">v7.1</span>
+                <span className="ml-1 text-black">v8.0</span>
               </h1>
             </div>
           )}
@@ -1212,21 +1155,43 @@ export default function App() {
         </nav>
 
         <div className="border-t border-border p-3">
-          {sidebarOpen && (
-            <div className="mb-2 min-w-0">
-              <p className="text-[11px] font-semibold truncate">
-                {session.user.NombreCompleto || session.user.Usuario}
-              </p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {session.user.Rol}
-              </p>
-            </div>
-          )}
+          {sidebarOpen && (() => {
+            const getInitials = (name: string) => {
+              if (!name) return '?';
+              const parts = name.trim().split(/\s+/);
+              return parts[0][0].toUpperCase();
+            };
+            
+            const displayName = (session.user.NombreCompleto || session.user.Usuario).toUpperCase();
+            const initials = getInitials(displayName);
+            
+            const nameLength = displayName.length;
+            const nameFontSize = nameLength > 22 ? '10px' : nameLength > 15 ? '11px' : '13px';
+
+            return (
+              <div className="mb-4 flex items-center gap-3 min-w-0">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-lg shadow-sm border border-blue-200">
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p 
+                    className="font-bold text-slate-800 whitespace-normal break-words leading-tight" 
+                    style={{ fontSize: nameFontSize }}
+                  >
+                    {displayName}
+                  </p>
+                  <p className="text-[9px] text-slate-500 font-bold truncate uppercase tracking-wider mt-1" title={session.user.Rol}>
+                    {session.user.Rol}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
           <button
             onClick={() => {
               window.api.clearRemoteSession?.();
               setSession(null);
-              setCurrentView("dashboard");
+              setCurrentView("cumplimientos");
             }}
             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] font-medium text-destructive hover:bg-destructive/10 rounded-md transition-colors"
             title="Cerrar sesión"
@@ -1265,12 +1230,6 @@ export default function App() {
         </header>
 
         <section className="flex-1 min-h-0 p-4 bg-muted/20">
-          {currentView === "dashboard" && (
-            <DashboardView
-              expedientes={expedientes}
-              diasInhabiles={diasInhabiles}
-            />
-          )}
           {currentView === "cumplimientos" && (
             <CumplimientosExcel permissions={permissions} isAdmin={isAdmin} />
           )}
