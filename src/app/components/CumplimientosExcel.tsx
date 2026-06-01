@@ -91,10 +91,10 @@ const SORT_COLUMNS: Array<{ key: SortColumnKey; label: string; type: 'number' | 
   { key: 'diasNaturalesTranscurridos', label: 'DÍAS NATURALES TRANSCURRIDOS', type: 'number' },
   { key: 'diasHabilesTranscurridos', label: 'DÍAS HÁBILES TRANSCURRIDOS', type: 'number' },
   { key: 'estatus', label: 'ESTATUS', type: 'estatus' },
-  { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', type: 'date' },
-  { key: 'fechaVista', label: 'FECHA RECIBE JUZGADO', type: 'date' },
-  { key: 'fechaVistaCumpli', label: 'FECHA VISTA CUMPLI', type: 'date' },
   { key: 'revisionContraSentencia', label: 'REVISION CONTRA SENTENCIA', type: 'date' },
+  { key: 'fechaVistaCumpli', label: 'FEC. VISTA CUMPLIMIENTO', type: 'date' },
+  { key: 'fechaVista', label: 'FEC. VISTA (RECIBE JZDO)', type: 'date' },
+  { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', type: 'date' },
   { key: 'fechaCumplimiento', label: 'FECHA DE CUMPLIMIENTO', type: 'date' },
   { key: 'fechaArchivo', label: 'FECHA DE ARCHIVO', type: 'date' },
   { key: 'cumplimientoMenorFechaEjecutoria', label: 'CUMPLIMIENTO < FECHA EJECUTORIA', type: 'text' },
@@ -184,10 +184,10 @@ const TABLE_HEADERS: Array<{ key: SortColumnKey; label: string; minWidth: string
   { key: 'diasNaturalesTranscurridos', label: 'DÍAS NATURALES TRANSCURRIDOS', minWidth: 'min-w-[190px]', align: 'center' },
   { key: 'diasHabilesTranscurridos', label: 'DÍAS HÁBILES TRANSCURRIDOS', minWidth: 'min-w-[190px]', align: 'center' },
   { key: 'estatus', label: 'ESTATUS', minWidth: 'min-w-[140px]', align: 'center' },
-  { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', minWidth: 'min-w-[170px]', align: 'center' },
-  { key: 'fechaVista', label: 'FECHA RECIBE JUZGADO', minWidth: 'min-w-[140px]' },
-  { key: 'fechaVistaCumpli', label: 'FECHA VISTA CUMPLI', minWidth: 'min-w-[140px]' },
   { key: 'revisionContraSentencia', label: 'REVISION CONTRA SENTENCIA', minWidth: 'min-w-[130px]', align: 'center' },
+  { key: 'fechaVistaCumpli', label: 'FEC. VISTA CUMPLIMIENTO', minWidth: 'min-w-[150px]' },
+  { key: 'fechaVista', label: 'FEC. VISTA (RECIBE JZDO)', minWidth: 'min-w-[160px]' },
+  { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', minWidth: 'min-w-[170px]', align: 'center' },
   { key: 'fechaCumplimiento', label: 'FECHA DE CUMPLIMIENTO', minWidth: 'min-w-[120px]' },
   { key: 'fechaArchivo', label: 'FECHA DE ARCHIVO', minWidth: 'min-w-[110px]' },
   { key: 'cumplimientoMenorFechaEjecutoria', label: 'CUMPLIMIENTO < FECHA EJECUTORIA', minWidth: 'min-w-[140px]', align: 'center' },
@@ -213,8 +213,8 @@ const EXPORT_COLUMNS: Array<{ header: string; key: keyof Expediente; type?: 'dat
   { header: 'DÍAS HABILES TRANSCURRIDOS', key: 'diasHabilesTranscurridos' },
   { header: 'ESTATUS', key: 'estatus' },
   { header: 'SE DECLARÓ SIN MATERIA', key: 'seDeclaroSinMateria', type: 'date' },
-  { header: 'FECHA RECIBE JUZGADO', key: 'fechaVista', type: 'date' },
-  { header: 'FECHA VISTA CUMPLI', key: 'fechaVistaCumpli', type: 'date' },
+  { header: 'FEC. VISTA (RECIBE JZDO)', key: 'fechaVista', type: 'date' },
+  { header: 'FEC. VISTA CUMPLIMIENTO', key: 'fechaVistaCumpli', type: 'date' },
   { header: 'REVISION CONTRA SENTENCIA', key: 'revisionContraSentencia', type: 'date' },
   { header: 'FECHA DE CUMPLIMIENTO', key: 'fechaCumplimiento', type: 'date' },
   { header: 'FECHA DE ARCHIVO', key: 'fechaArchivo', type: 'date' },
@@ -2882,16 +2882,16 @@ export default function CumplimientosExcel({
                   <td className="px-2 py-1.5 border-r border-border text-center">
                     <StatusBadgeSemaforo estatus={exp.estatus} diasHabiles={exp.diasHabilesTranscurridos} />
                   </td>
-                  <td className="px-2 py-1.5 border-r border-border text-center">
-                    {formatDate(exp.seDeclaroSinMateria)}
+                  <td className="px-2 py-1.5 border-r border-border text-center">{formatDate(exp.revisionContraSentencia)}</td>
+                  <td className="px-2 py-1.5 border-r border-border">
+                    {formatDate(exp.fechaVistaCumpli)}
                   </td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaVista)}
                   </td>
-                  <td className="px-2 py-1.5 border-r border-border">
-                    {formatDate(exp.fechaVistaCumpli)}
+                  <td className="px-2 py-1.5 border-r border-border text-center">
+                    {formatDate(exp.seDeclaroSinMateria)}
                   </td>
-                  <td className="px-2 py-1.5 border-r border-border text-center">{formatDate(exp.revisionContraSentencia)}</td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaCumplimiento)}
                   </td>

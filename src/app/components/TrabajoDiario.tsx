@@ -70,6 +70,8 @@ const TRABAJO_SORT_COLUMNS: Array<{ key: string; label: string; type: TrabajoSor
   { key: 'diasNaturales', label: 'DIAS NATURALES', type: 'number' },
   { key: 'diasHabiles', label: 'DIAS HABILES', type: 'number' },
   { key: 'estatusCumplimiento', label: 'ESTATUS', type: 'estatus' },
+  { key: 'fechaVistaCumpli', label: 'FEC. VISTA CUMPLIMIENTO', type: 'date' },
+  { key: 'fechaVista', label: 'FEC. VISTA (RECIBE JZDO)', type: 'date' },
   { key: 'fechaAcuerdo', label: 'FECHA ACUERDO', type: 'date' },
   { key: 'estatus', label: 'ESTATUS ATENCION', type: 'estatus' },
   { key: 'observaciones', label: 'OBSERVACIONES TRABAJO DIARIO', type: 'text' },
@@ -427,6 +429,8 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
         const band = getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos);
         return band === 'EMPTY' ? '(Vacias)' : getEstatusBandLabel(band);
       }
+      case 'fechaVistaCumpli': return String(formatDateDMY(exp.fechaVistaCumpli) || '-');
+      case 'fechaVista': return String(formatDateDMY(exp.fechaVista) || '-');
       case 'fechaAcuerdo': return String(formatDateDMY(exp.fechaAcuerdo) || '-');
       case 'estatus': return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
       case 'observaciones': return String(exp.observacionesDiario || '');
@@ -935,7 +939,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
           return direction === 'ASC' ? daysA - daysB : daysB - daysA;
         }
 
-        if (column === 'fechaAcuerdo' || column === 'fechaCaptura' || column === 'ultimoRequerimiento') {
+        if (column === 'fechaAcuerdo' || column === 'fechaCaptura' || column === 'ultimoRequerimiento' || column === 'fechaVistaCumpli' || column === 'fechaVista') {
           const numA = parseSortDate(valA) ?? -Infinity;
           const numB = parseSortDate(valB) ?? -Infinity;
           return direction === 'ASC' ? numA - numB : numB - numA;
@@ -1204,6 +1208,8 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                       {renderTableHeader('diasNaturales', 'Días Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Naturales Transcurridos')}
                       {renderTableHeader('diasHabiles', 'Días Hábiles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Hábiles Transcurridos')}
                       {renderTableHeader('estatusCumplimiento', 'Estatus', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('fechaVistaCumpli', 'Fec. Vista Cumplimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('fechaVista', 'Fec. Vista (Recibe Jzdo)', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaAcuerdo', 'Fecha Acuerdo', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('estatus', 'Estatus Atención', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('observaciones', 'Observaciones Trabajo Diario', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
@@ -1238,6 +1244,8 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                           <td className={`px-4 py-3 text-center whitespace-nowrap ${rowColor}`}>
                             <StatusBadgeSemaforo estatus={exp.estatus} diasHabiles={exp.diasHabilesTranscurridos} />
                           </td>
+                          <td className={`px-4 py-3 text-slate-500 font-medium whitespace-nowrap ${rowColor}`}>{oneLineCell(formatDateDMY(exp.fechaVistaCumpli) || '-')}</td>
+                          <td className={`px-4 py-3 text-slate-500 font-medium whitespace-nowrap ${rowColor}`}>{oneLineCell(formatDateDMY(exp.fechaVista) || '-')}</td>
                           <td className={`px-4 py-3 text-slate-500 font-medium whitespace-nowrap ${rowColor}`}>{oneLineCell(formatDateDMY(exp.fechaAcuerdo) || '-')}</td>
                           <td className={`px-4 py-3 whitespace-nowrap ${rowColor}`}>
                             <StatusBadge status={estatusTrabajo} />
@@ -1290,7 +1298,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     })}
                     {filteredExpedientes.length === 0 && (
                       <tr>
-                        <td colSpan={can('trabajo.capture') ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">
+                        <td colSpan={can('trabajo.capture') ? 16 : 15} className="px-4 py-8 text-center text-muted-foreground">
                           No se encontraron expedientes vivos.
                         </td>
                       </tr>
