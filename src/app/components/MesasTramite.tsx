@@ -59,12 +59,13 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
   // Modals / forms state
   const [showMesaModal, setShowMesaModal] = useState(false);
   const [editingMesa, setEditingMesa] = useState<MesaRecord | null>(null);
-  const [deletingMesa, setDeletingMesa] = useState<MesaRecord | null>(null);
   const [formMesa, setFormMesa] = useState('');
   const [formNombre, setFormNombre] = useState('');
   const [formActivo, setFormActivo] = useState(true);
   const [modalError, setModalError] = useState('');
   const [savingMesa, setSavingMesa] = useState(false);
+  const [deletingMesa, setDeletingMesa] = useState<MesaRecord | null>(null);
+  const [deletingMesaSaving, setDeletingMesaSaving] = useState(false);
 
   // Auto assign state
   const [autoAssigning, setAutoAssigning] = useState(false);
@@ -175,27 +176,6 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
     setShowMesaModal(true);
   }
 
-  const handleDeleteMesa = (mesa: MesaRecord) => {
-    setDeletingMesa(mesa);
-  };
-
-  const confirmDeleteMesa = async () => {
-    if (!deletingMesa) return;
-    try {
-      const res = await (window as any).api.deleteMesa(deletingMesa.ID_MESA);
-      if (res.ok) {
-        toastSuccess('Mesa eliminada', 'La mesa ha sido eliminada correctamente.');
-        await loadMesas();
-      } else {
-        toastError('Error', res.error || 'No se pudo eliminar la mesa.');
-      }
-    } catch (err: any) {
-      toastError('Error', err.message || 'Error inesperado al eliminar.');
-    } finally {
-      setDeletingMesa(null);
-    }
-  };
-
   async function openReassignModal() {
     setSelectedExpediente(null);
     setReassignSearch('');
@@ -251,6 +231,34 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
       toastSuccess('Mesa actualizada', `La mesa se ha ${mesa.ACTIVO === 1 ? 'desactivado' : 'activado'} correctamente.`);
     } catch (err: any) {
       toastError('Error', err.message || 'No se pudo cambiar el estado de la mesa.');
+    }
+  }
+
+  function handleDeleteMesa(mesa: MesaRecord) {
+    if (!can('mesas.manage')) return;
+    setDeletingMesa(mesa);
+
+  }
+
+  async function confirmDeleteMesa() {
+    if (!deletingMesa) return;
+
+    setDeletingMesaSaving(true);
+    try {
+      const result = await window.api.deleteMesa(deletingMesa.ID_MESA);
+      if (!result?.ok) {
+        toastError('Error', result?.error || 'No se pudo eliminar la mesa.');
+        return;
+      }
+
+      await loadMesas();
+      await loadExpedientes();
+      toastSuccess('Mesa eliminada', `${deletingMesa.MESA} fue eliminada correctamente.`);
+      setDeletingMesa(null);
+    } catch (err: any) {
+      toastError('Error', err.message || 'No se pudo eliminar la mesa.');
+    } finally {
+      setDeletingMesaSaving(false);
     }
   }
 
@@ -1322,6 +1330,45 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
         </div>
       )}
 
+      {/* Delete Mesa Modal */}
+      {deletingMesa && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-6 py-8 text-center">
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                <Trash2 className="h-8 w-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800">
+                ¿Eliminar {deletingMesa.MESA}?
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 bg-slate-50 p-4">
+              <button
+                type="button"
+                onClick={() => setDeletingMesa(null)}
+                disabled={deletingMesaSaving}
+                className="h-12 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteMesa}
+                disabled={deletingMesaSaving}
+                className="flex h-12 items-center justify-center gap-2 rounded-lg bg-red-600 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingMesaSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Create / Edit Mesa Modal */}
       {showMesaModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4" onClick={() => setShowMesaModal(false)}>
@@ -1407,36 +1454,6 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
         </div>
       )}
 
-      {/* Delete Modal */}
-      {deletingMesa && createPortal(
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 text-center">
-              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">
-                ¿Eliminar mesa {deletingMesa.MESA}?
-              </h3>
-            </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-              <button
-                onClick={() => setDeletingMesa(null)}
-                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmDeleteMesa}
-                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm"
-              >
-                Sí, eliminar
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
     </div>
   );

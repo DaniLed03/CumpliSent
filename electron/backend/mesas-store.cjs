@@ -32,7 +32,7 @@ function initializeMesasTables() {
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS "MESAS_TRAMITE" (
-      "ID_MESA" INTEGER PRIMARY KEY AUTOINCREMENT,
+      "ID_MESA" INTEGER PRIMARY KEY,
       "MESA" TEXT NOT NULL,
       "NOMBRE" TEXT DEFAULT '',
       "ACTIVO" INTEGER DEFAULT 1,
@@ -125,14 +125,31 @@ function listMesasActivas() {
   return database.prepare(`SELECT * FROM "MESAS_TRAMITE" WHERE "ACTIVO" = 1 ORDER BY "ID_MESA" ASC`).all();
 }
 
+function getNextAvailableMesaId(database) {
+  const rows = database.prepare('SELECT "ID_MESA" FROM "MESAS_TRAMITE" ORDER BY "ID_MESA" ASC').all();
+  let nextId = 1;
+
+  for (const row of rows) {
+    const currentId = Number(row.ID_MESA);
+    if (currentId === nextId) {
+      nextId += 1;
+    } else if (currentId > nextId) {
+      break;
+    }
+  }
+
+  return nextId;
+}
+
 function createMesa({ mesa, nombre }) {
   const database = getDb();
   const now = new Date().toISOString();
+  const nextId = getNextAvailableMesaId(database);
   database.prepare(`
-    INSERT INTO "MESAS_TRAMITE" ("MESA", "NOMBRE", "ACTIVO", "CREATED_AT", "UPDATED_AT")
-    VALUES (?, ?, 1, ?, ?)
-  `).run(mesa, nombre || '', now, now);
-  return { ok: true };
+    INSERT INTO "MESAS_TRAMITE" ("ID_MESA", "MESA", "NOMBRE", "ACTIVO", "CREATED_AT", "UPDATED_AT")
+    VALUES (?, ?, ?, 1, ?, ?)
+  `).run(nextId, mesa, nombre || '', now, now);
+  return { ok: true, idMesa: nextId };
 }
 
 function updateMesa(id, { mesa, nombre, activo }) {
@@ -148,12 +165,26 @@ function updateMesa(id, { mesa, nombre, activo }) {
 
 function deleteMesa(id) {
   const database = getDb();
-  
-  // Remove assignments from history using the mesa id
-  database.prepare(`DELETE FROM "HISTORIAL_ASIGNACION_MESAS" WHERE "ID_MESA_NUEVA" = ? OR "ID_MESA_ANTERIOR" = ?`).run(id, id);
+  const mesaId = Number(id);
+  if (!Number.isFinite(mesaId) || mesaId <= 0) {
+    return { ok: false, error: 'ID de mesa invalido' };
+  }
 
-  // Delete the mesa itself
-  database.prepare(`DELETE FROM "MESAS_TRAMITE" WHERE "ID_MESA" = ?`).run(id);
+  database.exec('BEGIN');
+  try {
+    ensureCumplimientosMesaColumns(database);
+    database.prepare('UPDATE "CUMPLIMIENTOS" SET "ID_MESA" = NULL WHERE "ID_MESA" = ?').run(mesaId);
+    database.prepare(`DELETE FROM "HISTORIAL_ASIGNACION_MESAS" WHERE "ID_MESA_NUEVA" = ? OR "ID_MESA_ANTERIOR" = ?`).run(mesaId, mesaId);
+    const result = database.prepare(`DELETE FROM "MESAS_TRAMITE" WHERE "ID_MESA" = ?`).run(mesaId);
+    database.exec('COMMIT');
+
+    if (result.changes === 0) {
+      return { ok: false, error: 'La mesa no existe' };
+    }
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
   
   return { ok: true };
 }
@@ -210,8 +241,8 @@ function importMesasCatalog(rows) {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const insertAutoStmt = database.prepare(`
-    INSERT INTO "MESAS_TRAMITE" ("MESA", "NOMBRE", "ACTIVO", "CREATED_AT", "UPDATED_AT")
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO "MESAS_TRAMITE" ("ID_MESA", "MESA", "NOMBRE", "ACTIVO", "CREATED_AT", "UPDATED_AT")
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   const updateStmt = database.prepare(`
     UPDATE "MESAS_TRAMITE"
@@ -258,7 +289,7 @@ function importMesasCatalog(rows) {
         insertWithIdStmt.run(idMesaVal, mesa, nombre, activo, now, now);
         totalCreated++;
       } else {
-        insertAutoStmt.run(mesa, nombre, activo, now, now);
+        insertAutoStmt.run(getNextAvailableMesaId(database), mesa, nombre, activo, now, now);
         totalCreated++;
       }
     }

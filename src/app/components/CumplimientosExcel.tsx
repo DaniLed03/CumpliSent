@@ -12,6 +12,7 @@ import {
   PlusCircle,
   RefreshCw,
   Info,
+  Loader2,
   Calendar,
   Clock,
   Save,
@@ -45,6 +46,7 @@ interface Expediente {
   estatus: number | string;
   seDeclaroSinMateria: string | boolean;
   fechaVista: string;
+  fechaVistaCumpli: string;
   revisionContraSentencia: string;
   fechaCumplimiento: string;
   fechaArchivo: string;
@@ -60,7 +62,7 @@ interface Expediente {
 
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_OVERSCAN_ROWS = 14;
-const TABLE_COLUMN_COUNT = 25;
+const TABLE_COLUMN_COUNT = 26;
 
 type EstatusBand = 'EMPTY' | 'GREEN' | 'YELLOW' | 'PINK' | 'RED';
 
@@ -80,9 +82,9 @@ const SORT_COLUMNS: Array<{ key: SortColumnKey; label: string; type: 'number' | 
   { key: 'numeroJuicio', label: 'NÚMERO DE JUICIO', type: 'text' },
   { key: 'materia', label: 'MATERIA', type: 'text' },
   { key: 'sentencia', label: 'SENTENCIA', type: 'date' },
+  { key: 'fechaEjecutoria', label: 'FECHA EJECUTORIA JUZGADO', type: 'date' },
   { key: 'fechaEjecutoriaColegiado', label: 'FECHA EJECUTORIA COLEGIADO', type: 'date' },
   { key: 'fechaEjecutoriaInconformidad', label: 'FECHA EJECUTORIA INCONFORMIDAD', type: 'date' },
-  { key: 'fechaEjecutoria', label: 'FECHA DE EJECUTORIA', type: 'date' },
   { key: 'fechaPorNoCumplida', label: 'FECHA POR NO CUMPLIDA', type: 'date' },
   { key: 'ultEjecutoria', label: 'ULT. EJECUTORIA', type: 'date' },
   { key: 'ultimoRequerimiento', label: 'ULTIMO REQUERIMIENTO', type: 'date' },
@@ -90,7 +92,8 @@ const SORT_COLUMNS: Array<{ key: SortColumnKey; label: string; type: 'number' | 
   { key: 'diasHabilesTranscurridos', label: 'DÍAS HÁBILES TRANSCURRIDOS', type: 'number' },
   { key: 'estatus', label: 'ESTATUS', type: 'estatus' },
   { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', type: 'date' },
-  { key: 'fechaVista', label: 'FECHA DE VISTA', type: 'date' },
+  { key: 'fechaVista', label: 'FECHA RECIBE JUZGADO', type: 'date' },
+  { key: 'fechaVistaCumpli', label: 'FECHA VISTA CUMPLI', type: 'date' },
   { key: 'revisionContraSentencia', label: 'REVISION CONTRA SENTENCIA', type: 'date' },
   { key: 'fechaCumplimiento', label: 'FECHA DE CUMPLIMIENTO', type: 'date' },
   { key: 'fechaArchivo', label: 'FECHA DE ARCHIVO', type: 'date' },
@@ -172,9 +175,9 @@ const TABLE_HEADERS: Array<{ key: SortColumnKey; label: string; minWidth: string
   { key: 'numeroJuicio', label: 'NÚMERO DE JUICIO', minWidth: 'min-w-[140px]' },
   { key: 'materia', label: 'MATERIA', minWidth: 'min-w-[100px]' },
   { key: 'sentencia', label: 'SENTENCIA', minWidth: 'min-w-[150px]' },
+  { key: 'fechaEjecutoria', label: 'FECHA EJECUTORIA JUZGADO', minWidth: 'min-w-[140px]' },
   { key: 'fechaEjecutoriaColegiado', label: 'FECHA EJECUTORIA COLEGIADO', minWidth: 'min-w-[120px]' },
   { key: 'fechaEjecutoriaInconformidad', label: 'FECHA EJECUTORIA INCONFORMIDAD', minWidth: 'min-w-[140px]' },
-  { key: 'fechaEjecutoria', label: 'FECHA DE EJECUTORIA', minWidth: 'min-w-[110px]' },
   { key: 'fechaPorNoCumplida', label: 'FECHA POR NO CUMPLIDA', minWidth: 'min-w-[120px]' },
   { key: 'ultEjecutoria', label: 'ULT. EJECUTORIA', minWidth: 'min-w-[100px]' },
   { key: 'ultimoRequerimiento', label: 'ULTIMO REQUERIMIENTO', minWidth: 'min-w-[160px]' },
@@ -182,7 +185,8 @@ const TABLE_HEADERS: Array<{ key: SortColumnKey; label: string; minWidth: string
   { key: 'diasHabilesTranscurridos', label: 'DÍAS HÁBILES TRANSCURRIDOS', minWidth: 'min-w-[190px]', align: 'center' },
   { key: 'estatus', label: 'ESTATUS', minWidth: 'min-w-[140px]', align: 'center' },
   { key: 'seDeclaroSinMateria', label: 'SE DECLARO SIN MATERIA', minWidth: 'min-w-[170px]', align: 'center' },
-  { key: 'fechaVista', label: 'FECHA DE VISTA', minWidth: 'min-w-[100px]' },
+  { key: 'fechaVista', label: 'FECHA RECIBE JUZGADO', minWidth: 'min-w-[140px]' },
+  { key: 'fechaVistaCumpli', label: 'FECHA VISTA CUMPLI', minWidth: 'min-w-[140px]' },
   { key: 'revisionContraSentencia', label: 'REVISION CONTRA SENTENCIA', minWidth: 'min-w-[130px]', align: 'center' },
   { key: 'fechaCumplimiento', label: 'FECHA DE CUMPLIMIENTO', minWidth: 'min-w-[120px]' },
   { key: 'fechaArchivo', label: 'FECHA DE ARCHIVO', minWidth: 'min-w-[110px]' },
@@ -199,9 +203,9 @@ const EXPORT_COLUMNS: Array<{ header: string; key: keyof Expediente; type?: 'dat
   { header: 'NÚMERO DE JUICIO', key: 'numeroJuicio' },
   { header: 'MATERIA', key: 'materia' },
   { header: 'SENTENCIA', key: 'sentencia', type: 'date' },
+  { header: 'FECHA EJECUTORIA JUZGADO', key: 'fechaEjecutoria', type: 'date' },
   { header: 'FECHA EJECUTORIA COLEGIADO', key: 'fechaEjecutoriaColegiado', type: 'date' },
   { header: 'FECHA EJECUTORIA INCONFORMIDAD', key: 'fechaEjecutoriaInconformidad', type: 'date' },
-  { header: 'FECHA DE EJECUTORIA', key: 'fechaEjecutoria', type: 'date' },
   { header: 'FECHA POR NO CUMPLIDA', key: 'fechaPorNoCumplida', type: 'date' },
   { header: 'ULT. EJECUTORIA', key: 'ultEjecutoria', type: 'date' },
   { header: 'ÚLTIMO REQUERIMIENTO', key: 'ultimoRequerimiento', type: 'date' },
@@ -209,7 +213,8 @@ const EXPORT_COLUMNS: Array<{ header: string; key: keyof Expediente; type?: 'dat
   { header: 'DÍAS HABILES TRANSCURRIDOS', key: 'diasHabilesTranscurridos' },
   { header: 'ESTATUS', key: 'estatus' },
   { header: 'SE DECLARÓ SIN MATERIA', key: 'seDeclaroSinMateria', type: 'date' },
-  { header: 'FECHA DE VISTA', key: 'fechaVista', type: 'date' },
+  { header: 'FECHA RECIBE JUZGADO', key: 'fechaVista', type: 'date' },
+  { header: 'FECHA VISTA CUMPLI', key: 'fechaVistaCumpli', type: 'date' },
   { header: 'REVISION CONTRA SENTENCIA', key: 'revisionContraSentencia', type: 'date' },
   { header: 'FECHA DE CUMPLIMIENTO', key: 'fechaCumplimiento', type: 'date' },
   { header: 'FECHA DE ARCHIVO', key: 'fechaArchivo', type: 'date' },
@@ -222,9 +227,9 @@ const EXPORT_COLUMNS: Array<{ header: string; key: keyof Expediente; type?: 'dat
 ];
 
 const EXPORT_COLUMN_WIDTHS = [
-  24.16, 17.91, 28.58, 22.91, 23.16, 25.66, 21.5, 21.66,
-  22.5, 25.08, 17.08, 17.08, 14.5, 21.91, 20.5, 20.5,
-  25.16, 20.5, 20.5, 48.5, 24, 26, 20.16, 27.16,
+  24.16, 17.91, 28.58, 22.91, 21.5, 23.16, 25.66, 21.66,
+  22.5, 25.08, 17.08, 17.08, 14.5, 21.91, 21.91, 20.5,
+  25.16, 20.5, 20.5, 48.5, 24, 26, 20.16, 20.16, 27.16,
 ];
 
 function getEstatusBand(estatus: number | string, diasHabiles: number | string): EstatusBand {
@@ -286,7 +291,9 @@ function getSortOrderLabel(column: ReturnType<typeof getSortColumn>, direction: 
   }
 
   if (column.type === 'estatus') {
-    return direction === 'ASC' ? 'Verde, amarillo, rojo claro y rojo' : 'Rojo, rojo claro, amarillo y verde';
+    return direction === 'ASC'
+      ? 'Verde a rojo, dias habiles menor a mayor'
+      : 'Rojo a verde, dias habiles mayor a menor';
   }
 
   if (column.type === 'text') {
@@ -332,6 +339,10 @@ function getEstatusSortNumber(exp: Expediente) {
   };
 
   return bandOrder[getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos)];
+}
+
+function getEstatusSortDays(exp: Expediente) {
+  return parseSortNumber(exp.diasHabilesTranscurridos) ?? parseSortNumber(exp.estatus);
 }
 
 function isSortBlank(value: unknown) {
@@ -399,7 +410,24 @@ function compareRowsLikeExcel(
     const rightValue = normalizeSortValue(right, level);
     let comparison = 0;
 
-    if (column.type === 'text') {
+    if (column.type === 'estatus') {
+      const leftRank = Number(leftValue);
+      const rightRank = Number(rightValue);
+      comparison = leftRank < rightRank ? -1 : leftRank > rightRank ? 1 : 0;
+
+      if (comparison === 0) {
+        const leftDays = getEstatusSortDays(left);
+        const rightDays = getEstatusSortDays(right);
+
+        if (leftDays === null && rightDays !== null) {
+          comparison = 1;
+        } else if (leftDays !== null && rightDays === null) {
+          comparison = -1;
+        } else if (leftDays !== null && rightDays !== null) {
+          comparison = leftDays < rightDays ? -1 : leftDays > rightDays ? 1 : 0;
+        }
+      }
+    } else if (column.type === 'text') {
       comparison = collator.compare(String(leftValue), String(rightValue));
     } else if (column.type === 'boolean') {
       comparison = Number(leftValue) - Number(rightValue);
@@ -459,6 +487,7 @@ export default function CumplimientosExcel({
   const [editDraft, setEditDraft] = useState<Expediente | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+  const [recargandoDatos, setRecargandoDatos] = useState(true);
 
   // Modales
   const [showModalAgregar, setShowModalAgregar] = useState(false);
@@ -530,8 +559,8 @@ export default function CumplimientosExcel({
     }
 
     if (key === 'estatus') {
-      const numeric = getEstatusSortNumber(exp);
-      return numeric === Number.POSITIVE_INFINITY ? '(Vac?as)' : String(numeric);
+      const band = getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos);
+      return band === 'EMPTY' ? '(Vacías)' : getEstatusBandLabel(band);
     }
 
     if (value === '' || value === null || value === undefined) {
@@ -594,10 +623,27 @@ export default function CumplimientosExcel({
     setTableFilterSearch('');
   };
 
+  const recargarDatos = useCallback(async () => {
+    setRecargandoDatos(true);
+    try {
+      const rows = await window.cumplimientosBackend.list();
+      if (Array.isArray(rows)) {
+        setExpedientes(rows);
+      }
+      toastSuccess('Datos recargados', 'La tabla de cumplimientos se actualizo correctamente.');
+    } catch (error: any) {
+      console.error('No se pudieron recargar los cumplimientos', error);
+      toastError('Error', error?.message || 'No se pudieron recargar los datos.');
+    } finally {
+      setRecargandoDatos(false);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
 
     const loadExpedientes = async () => {
+      setRecargandoDatos(true);
       try {
         const rows = await window.cumplimientosBackend.list();
         if (active && Array.isArray(rows)) {
@@ -613,6 +659,10 @@ export default function CumplimientosExcel({
         } catch (listError) {
           console.error('No se pudo cargar CUMPLIMIENTOS desde el backend local', listError);
         }
+      } finally {
+        if (active) {
+          setRecargandoDatos(false);
+        }
       }
     };
 
@@ -627,9 +677,12 @@ export default function CumplimientosExcel({
     const filtered = expedientes.filter((exp) => {
       if (!matchesEstatusFilter(exp, filtroEstatus)) return false;
       if (filtroJuicio && exp.numeroJuicio !== filtroJuicio) return false;
+      if (!filtroJuicio && deferredFiltroJuicioBusq && !String(exp.numeroJuicio ?? '').toLowerCase().includes(deferredFiltroJuicioBusq.toLowerCase())) return false;
       if (filtroMateria && exp.materia !== filtroMateria) return false;
+      if (!filtroMateria && deferredFiltroMateriaBusq && !String(exp.materia ?? '').toLowerCase().includes(deferredFiltroMateriaBusq.toLowerCase())) return false;
       if (filtroLocalizado !== '' && String(exp.localizado ? '1' : '0') !== filtroLocalizado) return false;
       if (filtroFirma && exp.firma !== filtroFirma) return false;
+      if (!filtroFirma && deferredFiltroFirmaBusq && !String(exp.firma ?? '').toLowerCase().includes(deferredFiltroFirmaBusq.toLowerCase())) return false;
       for (const [key, selectedValues] of Object.entries(tableColumnFilters)) {
         if (selectedValues && selectedValues.length > 0 && !selectedValues.includes(getTableFilterValue(exp, key as SortColumnKey))) {
           return false;
@@ -641,7 +694,7 @@ export default function CumplimientosExcel({
     return sortRowsLikeExcel(filtered, sortLevels);
   }, [expedientes, sortLevels, filtroEstatus, filtroJuicio, filtroMateria, filtroLocalizado, filtroFirma, tableColumnFilters, getTableFilterValue]);
 
-  const hayFiltros = filtroEstatus || filtroJuicio || filtroMateria || filtroLocalizado !== '' || filtroFirma || Object.keys(tableColumnFilters).length > 0;
+  const hayFiltros = filtroEstatus || filtroJuicio || deferredFiltroJuicioBusq || filtroMateria || deferredFiltroMateriaBusq || filtroLocalizado !== '' || filtroFirma || deferredFiltroFirmaBusq || Object.keys(tableColumnFilters).length > 0;
 
   const limpiarFiltros = () => {
     setFiltroEstatus('');
@@ -835,6 +888,7 @@ export default function CumplimientosExcel({
     { excelHeader: 'NÚMERO DE JUICIO',                      field: 'numeroJuicio',                     type: 'text'   },
     { excelHeader: 'MATERIA',                               field: 'materia',                          type: 'text'   },
     { excelHeader: 'SENTENCIA',                             field: 'sentencia',                        type: 'date'   },
+    { excelHeader: 'FECHA EJECUTORIA JUZGADO',              field: 'fechaEjecutoria',                  type: 'date'   },
     { excelHeader: 'FECHA EJECUTORIA COLEGIADO',            field: 'fechaEjecutoriaColegiado',          type: 'date'   },
     { excelHeader: 'FECHA EJECUTORIA INCONFORMIDAD',        field: 'fechaEjecutoriaInconformidad',      type: 'date'   },
     { excelHeader: 'FECHA DE EJECUTORIA',                   field: 'fechaEjecutoria',                  type: 'date'   },
@@ -844,6 +898,8 @@ export default function CumplimientosExcel({
     { excelHeader: 'ESTATUS',                               field: 'estatus',                          type: 'text'   },
     { excelHeader: 'SE DECLARO SIN MATERIA',                field: 'seDeclaroSinMateria',               type: 'date'   },
     { excelHeader: 'FECHA DE VISTA',                        field: 'fechaVista',                       type: 'date'   },
+    { excelHeader: 'FECHA RECIBE JUZGADO',                  field: 'fechaVista',                       type: 'date'   },
+    { excelHeader: 'FECHA VISTA CUMPLI',                    field: 'fechaVistaCumpli',                 type: 'date'   },
     { excelHeader: 'REVISION CONTRA SENTENCIA',             field: 'revisionContraSentencia',           type: 'date'   },
     { excelHeader: 'FECHA DE CUMPLIMIENTO',                 field: 'fechaCumplimiento',                type: 'date'   },
     { excelHeader: 'FECHA DE ARCHIVO',                      field: 'fechaArchivo',                     type: 'date'   },
@@ -1378,6 +1434,7 @@ export default function CumplimientosExcel({
           fechaEjecutoriaInconformidad: '',
           fechaPorNoCumplida: '',
           ultimoRequerimiento: '',
+          fechaVistaCumpli: '',
           revisionContraSentencia: '',
           observaciones: '',
           localizado: true,
@@ -1597,7 +1654,8 @@ export default function CumplimientosExcel({
 
       worksheet['!cols'] = EXPORT_COLUMN_WIDTHS.map((width) => ({ width }));
       worksheet['!rows'] = [{ hpt: 18 }, { hpt: 36 }];
-      worksheet['!autofilter'] = { ref: `A2:X${Math.max(2, rows.length)}` };
+      const lastExportColumn = XLSX.utils.encode_col(EXPORT_COLUMNS.length - 1);
+      worksheet['!autofilter'] = { ref: `A2:${lastExportColumn}${Math.max(2, rows.length)}` };
 
       const headerStyle = {
         font: { bold: true, color: { rgb: 'FFFFFF' } },
@@ -1848,6 +1906,7 @@ export default function CumplimientosExcel({
       'ultimoRequerimiento',
       'seDeclaroSinMateria',
       'fechaVista',
+      'fechaVistaCumpli',
       'revisionContraSentencia',
       'fechaCumplimiento',
       'fechaArchivo',
@@ -2096,6 +2155,7 @@ export default function CumplimientosExcel({
       return searchable.includes(search);
     });
     const isFiltered = Boolean(tableColumnFilters[header.key]);
+    const activeSortLevel = sortLevels.find((level) => level.column === header.key);
     const allVisibleSelected = visibleOptions.length > 0 && visibleOptions.every((option) => draftTableFilterValues.includes(option));
     const dateTree = column.type === 'date' ? buildDateFilterTree(visibleOptions) : [];
 
@@ -2111,7 +2171,7 @@ export default function CumplimientosExcel({
             e.stopPropagation();
             openExcelColumnFilter(header.key);
           }}
-          className={`absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded flex items-center justify-center transition-colors border ${isFiltered ? 'bg-white border-blue-600 text-blue-700' : 'bg-transparent border-transparent text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+          className={`absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded flex items-center justify-center transition-colors border ${isFiltered || activeSortLevel ? 'bg-white border-blue-600 text-blue-700' : 'bg-transparent border-transparent text-blue-200 hover:bg-blue-800 hover:text-white'}`}
           title={`Filtrar ${header.label}`}
         >
           <ChevronDown className="w-3.5 h-3.5" />
@@ -2131,17 +2191,24 @@ export default function CumplimientosExcel({
               {(['ASC', 'DESC'] as SortDirection[]).map((direction) => (
                 <button
                   key={direction}
-                  className="w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                  className={`w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs font-semibold rounded-md transition-colors ${
+                    activeSortLevel?.direction === direction
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700'
+                  }`}
                   onClick={() => {
-                    const nextSort = [{ id: `filtro-${Date.now()}`, column: header.key, direction }];
+                    const nextSort = activeSortLevel?.direction === direction
+                      ? []
+                      : [{ id: `filtro-${Date.now()}`, column: header.key, direction }];
                     setSortLevels(nextSort);
                     setDraftSortLevels(nextSort);
+                    saveSortLevels(nextSort);
                     setVisibleRows({ start: 0, end: 80 });
                     tableViewportRef.current?.scrollTo({ top: 0 });
                     setOpenTableFilter(null);
                   }}
                 >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                  <ArrowUpDown className={`w-3.5 h-3.5 ${activeSortLevel?.direction === direction ? 'text-blue-700' : 'text-slate-500'}`} />
                   <span className="truncate">{getFilterMenuSortLabel(column.type, direction)}</span>
                 </button>
               ))}
@@ -2174,7 +2241,7 @@ export default function CumplimientosExcel({
 
               <div className="max-h-60 overflow-y-auto p-1.5 text-xs">
               {column.type !== 'date' && (
-                <label className="flex items-center gap-2 py-2 px-2 rounded-md hover:bg-blue-50 font-semibold text-slate-800 cursor-pointer">
+                <label className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-blue-50 text-[10px] font-semibold text-slate-800 cursor-pointer">
                   <TriStateCheckbox
                     checked={allVisibleSelected}
                     indeterminate={
@@ -2260,7 +2327,7 @@ export default function CumplimientosExcel({
                   return (
                     <label
                       key={option}
-                      className={`flex items-center gap-2 py-2 px-2 rounded-md cursor-pointer transition-colors ${
+                      className={`flex items-center gap-2 py-1 px-2 rounded-md cursor-pointer transition-colors text-[10px] ${
                         checked ? 'bg-blue-50 text-slate-900' : 'hover:bg-slate-50 text-slate-700'
                       }`}
                     >
@@ -2274,7 +2341,7 @@ export default function CumplimientosExcel({
                               : current.filter((value) => value !== option)
                           );
                         }}
-                        className="w-3.5 h-3.5 accent-blue-600"
+                        className="w-3.5 h-3.5 accent-blue-600 flex-shrink-0"
                       />
                       <span className="truncate font-medium">{option}</span>
                     </label>
@@ -2728,6 +2795,14 @@ export default function CumplimientosExcel({
               <ArrowUpDown className="w-3.5 h-3.5" />
               ORDENAR
             </button>
+            <button
+              onClick={recargarDatos}
+              disabled={recargandoDatos}
+              className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-100 disabled:opacity-50"
+              title="Recargar datos"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${recargandoDatos ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
           <div className="basis-full text-[9px] text-slate-500 font-medium whitespace-nowrap leading-none">
@@ -2742,12 +2817,17 @@ export default function CumplimientosExcel({
 
       {/* TABLA PRINCIPAL TIPO EXCEL - COMPACTA Y RESPONSIVE */}
       <div className="bg-white rounded-lg border border-border overflow-hidden flex-1 min-h-0">
-        <div
-          ref={tableViewportRef}
-          onScroll={updateVisibleRows}
-          className="h-full min-h-0 overflow-auto"
-        >
-          <table className="cumplimientos-sticky-table w-full text-[10px] border-collapse">
+        {recargandoDatos ? (
+          <div className="flex h-full min-h-[320px] items-center justify-center">
+            <Loader2 className="w-14 h-14 animate-spin text-primary" strokeWidth={2.25} />
+          </div>
+        ) : (
+          <div
+            ref={tableViewportRef}
+            onScroll={updateVisibleRows}
+            className="h-full min-h-0 overflow-auto"
+          >
+            <table className="cumplimientos-sticky-table w-full text-[10px] border-collapse">
             <thead className="bg-[#1e40af] text-white sticky top-0 z-10">
               <tr>
                 {TABLE_HEADERS.map(renderTableHeader)}
@@ -2776,17 +2856,17 @@ export default function CumplimientosExcel({
                   }`}
                 >
                   <td className={`px-2 py-1.5 border-r text-center font-semibold ${isSelectedRow ? 'border-blue-200 text-blue-900' : 'border-border'}`}>{visibleRows.start + index + 1}</td>
-                  <td className="px-2 py-1.5 border-r border-border font-medium">{exp.numeroJuicio}</td>
+                  <td className="px-2 py-1.5 border-r border-border font-bold text-slate-900">{exp.numeroJuicio}</td>
                   <td className="px-2 py-1.5 border-r border-border">{exp.materia}</td>
                   <td className="px-2 py-1.5 border-r border-border">{formatDate(exp.sentencia)}</td>
+                  <td className="px-2 py-1.5 border-r border-border">
+                    {formatDate(exp.fechaEjecutoria)}
+                  </td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaEjecutoriaColegiado)}
                   </td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaEjecutoriaInconformidad)}
-                  </td>
-                  <td className="px-2 py-1.5 border-r border-border">
-                    {formatDate(exp.fechaEjecutoria)}
                   </td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaPorNoCumplida)}
@@ -2807,6 +2887,9 @@ export default function CumplimientosExcel({
                   </td>
                   <td className="px-2 py-1.5 border-r border-border">
                     {formatDate(exp.fechaVista)}
+                  </td>
+                  <td className="px-2 py-1.5 border-r border-border">
+                    {formatDate(exp.fechaVistaCumpli)}
                   </td>
                   <td className="px-2 py-1.5 border-r border-border text-center">{formatDate(exp.revisionContraSentencia)}</td>
                   <td className="px-2 py-1.5 border-r border-border">
@@ -2865,8 +2948,9 @@ export default function CumplimientosExcel({
                 </tr>
               )}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* MODAL ELIMINAR EXPEDIENTE */}
@@ -3654,13 +3738,14 @@ export default function CumplimientosExcel({
                   Fechas Importantes
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
+                  {renderEditableField('Fecha Ejecutoria Juzgado', 'fechaEjecutoria', { type: 'date' })}
                   {renderEditableField('Fecha Ejecutoria Colegiado', 'fechaEjecutoriaColegiado', { type: 'date' })}
                   {renderEditableField('Fecha Ejecutoria Inconformidad', 'fechaEjecutoriaInconformidad', { type: 'date' })}
-                  {renderEditableField('Fecha de Ejecutoria', 'fechaEjecutoria', { type: 'date' })}
                   {renderEditableField('Fecha por No Cumplida', 'fechaPorNoCumplida', { type: 'date' })}
                   {renderEditableField('Ultima Ejecutoria', 'ultEjecutoria', { type: 'date', readOnly: true })}
                   {renderEditableField('Último Requerimiento', 'ultimoRequerimiento', { type: 'date' })}
-                  {(isEditing || selectedExpediente.fechaVista) && renderEditableField('Fecha de Vista', 'fechaVista', { type: 'date' })}
+                  {(isEditing || selectedExpediente.fechaVista) && renderEditableField('Fecha Recibe Juzgado', 'fechaVista', { type: 'date' })}
+                  {(isEditing || selectedExpediente.fechaVistaCumpli) && renderEditableField('Fecha Vista Cumpli', 'fechaVistaCumpli', { type: 'date' })}
                   {(isEditing || selectedExpediente.fechaCumplimiento) && renderEditableField('Fecha de Cumplimiento', 'fechaCumplimiento', { type: 'date' })}
                   {(isEditing || selectedExpediente.fechaArchivo) && renderEditableField('Fecha de Archivo', 'fechaArchivo', { type: 'date' })}
                 </div>

@@ -260,6 +260,7 @@ function orderAuxiliaryColumns(headers: string[]) {
     "ACUMULADO",
     "Ult. Requerimiento",
     "Vista",
+    "Vista Cumpli",
     "FEC. POR NO CUMPLIDA",
     "FEC. SIN MATERIA",
   ];
@@ -344,6 +345,7 @@ function processRows(headersInput: string[], rows: Row[]) {
   const colAcumulado = ensureColumn(headers, "ACUMULADO");
   const colUltReq = ensureColumn(headers, "Ult. Requerimiento");
   const colVista = ensureColumn(headers, "Vista");
+  const colVistaCumpli = ensureColumn(headers, "Vista Cumpli");
   const colNoCumplida = ensureColumn(headers, "FEC. POR NO CUMPLIDA");
   const colSinMateria = ensureColumn(headers, "FEC. SIN MATERIA");
   const orderedHeaders = orderAuxiliaryColumns(headers);
@@ -369,6 +371,11 @@ function processRows(headersInput: string[], rows: Row[]) {
       obs,
       "CUMPLIMIENTO DE LA RESPONSABLE",
       51,
+    );
+    next[colVistaCumpli] = extractAroundPhrase(
+      obs,
+      "CUMPLIMIENTO DE LA RESPONSABLE",
+      31,
     );
     next[colNoCumplida] = extractAroundPhrase(
       obs,

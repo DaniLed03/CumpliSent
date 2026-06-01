@@ -33,6 +33,7 @@ const {
   listMesasActivas,
   createMesa,
   updateMesa,
+  deleteMesa,
   importMesasCatalog,
   importMesaAssignments,
   autoAssignMesas,
@@ -346,6 +347,12 @@ function buildApp() {
     preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
   }, async (request) => {
     return updateMesa(Number(request.params.id), request.body || {});
+  });
+
+  app.delete('/api/mesas/:id', {
+    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+  }, async (request) => {
+    return deleteMesa(Number(request.params.id));
   });
 
   app.post('/api/mesas/import-catalog', {

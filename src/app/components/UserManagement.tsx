@@ -4,6 +4,7 @@ import {
   User,
   UserPlus,
   Edit,
+  Trash2,
   Shield,
   CheckCircle,
   XCircle,
@@ -14,7 +15,6 @@ import {
   Loader2,
   AlertCircle,
   Search,
-  Trash2,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import {
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { showStyledAlert } from '../utils/alert';
-import { toastSuccess } from '../utils/toast';
+import { toastError, toastSuccess } from '../utils/toast';
 import { EditarUsuarioModal, NuevoUsuarioModal } from './modals/SystemModals';
 
 export default function UserManagement({
@@ -44,7 +44,8 @@ export default function UserManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
-  const [deletingUser, setDeletingUser] = useState<UserRecord | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserRecord | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
@@ -282,33 +283,38 @@ export default function UserManagement({
     }
   }
 
-  const handleDeleteUser = (user: UserRecord) => {
-    setDeletingUser(user);
-  };
+  async function confirmDeleteUser() {
+    if (!userToDelete) return;
+    setDeletingUser(true);
 
-  const confirmDeleteUser = async () => {
-    if (!deletingUser) return;
     try {
-      const res = await window.api.deleteUser(deletingUser.IdUsuario);
-      if (!res.ok) {
+      const result = await window.api.deleteUser(userToDelete.IdUsuario);
+      if (!result?.ok) {
+        const message = result?.error || 'No se pudo eliminar el usuario.';
+        toastError('Error', message);
         showStyledAlert({
           title: 'Error del sistema',
-          text: res.error || 'Error al eliminar usuario',
+          text: message,
           icon: 'error',
         });
         return;
       }
-      setDeletingUser(null);
+
+      setUserToDelete(null);
       await loadData();
-      toastSuccess('Operación completada', 'El usuario fue eliminado correctamente.');
-    } catch (error: any) {
+      toastSuccess('Usuario eliminado', 'El usuario se elimino correctamente.');
+    } catch (err: any) {
+      const message = err?.message || 'Error inesperado al eliminar el usuario.';
+      toastError('Error', message);
       showStyledAlert({
         title: 'Error del sistema',
-        text: error?.message || 'Error inesperado',
+        text: message,
         icon: 'error',
       });
+    } finally {
+      setDeletingUser(false);
     }
-  };
+  }
 
   const filteredUsers = users.filter(
     (u) =>
@@ -427,11 +433,11 @@ export default function UserManagement({
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(user)}
-                          className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors inline-flex"
+                          onClick={() => setUserToDelete(user)}
+                          className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
                           title="Eliminar usuario"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
                       </div>
                     )}
@@ -449,6 +455,49 @@ export default function UserManagement({
           </table>
         </div>
       </div>
+
+      {/* Delete user modal */}
+      {userToDelete && createPortal(
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4"
+          onClick={() => !deletingUser && setUserToDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">
+                ¿Eliminar usuario {userToDelete.Usuario}?
+              </h3>
+              <p className="text-sm text-slate-500">
+                Esta acción eliminara el usuario del sistema.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setUserToDelete(null)}
+                disabled={deletingUser}
+                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                disabled={deletingUser}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deletingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Modal form */}
       {showForm && (
@@ -619,36 +668,6 @@ export default function UserManagement({
         </div>
       )}
 
-      {/* Delete Modal */}
-      {deletingUser && createPortal(
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 text-center">
-              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">
-                ¿Eliminar usuario {deletingUser.Usuario}?
-              </h3>
-            </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-              <button
-                onClick={() => setDeletingUser(null)}
-                className="flex-1 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmDeleteUser}
-                className="flex-1 flex justify-center items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm shadow-sm"
-              >
-                Sí, eliminar
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

@@ -24,6 +24,7 @@ const CUMPLIMIENTOS_COLUMNS = [
   ['estatus', 'ESTATUS', 'TEXT'],
   ['seDeclaroSinMateria', 'SE DECLARÓ SIN MATERIA', 'DATE'],
   ['fechaVista', 'FECHA DE VISTA', 'DATE'],
+  ['fechaVistaCumpli', 'FECHA VISTA CUMPLI', 'DATE'],
   ['revisionContraSentencia', 'REVISION CONTRA SENTENCIA', 'DATE'],
   ['fechaCumplimiento', 'FECHA DE CUMPLIMIENTO', 'DATE'],
   ['fechaArchivo', 'FECHA DE ARCHIVO', 'DATE'],

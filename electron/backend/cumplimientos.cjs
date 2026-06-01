@@ -202,6 +202,9 @@ function normalizarCumplimiento(row, index = 0) {
     estatus: upperText(row.estatus),
     seDeclaroSinMateria: toIsoDate(row.seDeclaroSinMateria),
     fechaVista: toIsoDate(row.fechaVista),
+    fechaVistaCumpli:
+      toIsoDate(row.fechaVistaCumpli) ||
+      toIsoDate(extractAroundPhrase(row.observaciones, 'CUMPLIMIENTO DE LA RESPONSABLE', 31)),
     revisionContraSentencia: toIsoDate(row.revisionContraSentencia),
     fechaCumplimiento: toIsoDate(row.fechaCumplimiento),
     fechaArchivo: toIsoDate(row.fechaArchivo),
@@ -373,6 +376,24 @@ function extractFechaPorNoCumplida(observaciones) {
   return dateMatch ? toIsoDate(dateMatch[1]) : '';
 }
 
+function extractAroundPhrase(text, phrase, offset) {
+  const value = String(text || '');
+  const upperValue = value.toUpperCase();
+  const upperPhrase = phrase.toUpperCase();
+  const index = upperValue.lastIndexOf(upperPhrase);
+
+  if (index < 0) {
+    return '';
+  }
+
+  const start = index + offset;
+  if (start < 0 || start >= value.length) {
+    return '';
+  }
+
+  return value.slice(start, start + 10).trim();
+}
+
 function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
   const expediente = pick(sentencia, ['EXPEDIENTE']);
   const sentidoInconformidad = pick(sentencia, ['SENTIDO EJECUTORIA INCONFORMIDAD']);
@@ -428,6 +449,10 @@ function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
       lastTen
     ) || existente.seDeclaroSinMateria,
     fechaVista: sourceDateValue(pick(sentencia, ['VISTA']), lastTen) || existente.fechaVista,
+    fechaVistaCumpli: sourceDateValue(
+      pick(sentencia, ['FECHA VISTA CUMPLI', 'VISTA CUMPLI']) ||
+        extractAroundPhrase(pick(sentencia, ['OBSERVACIONES']), 'CUMPLIMIENTO DE LA RESPONSABLE', 31)
+    ) || existente.fechaVistaCumpli,
     revisionContraSentencia,
     fechaCumplimiento:
       sourceDateValue(pick(sentencia, [

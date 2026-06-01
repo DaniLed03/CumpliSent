@@ -155,7 +155,7 @@
 
 .trabajo-diario-table tbody tr:hover > td:nth-child(1),
 .trabajo-diario-table tbody tr:hover > td:nth-child(2) {
-  background: #f8fafc !important;
+  filter: brightness(0.985);
 }
 
 .trabajo-diario-table .trabajo-diario-action-cell {
@@ -180,6 +180,30 @@
   z-index: auto !important;
   background: #ffffff !important;
   box-shadow: none !important;
+}
+
+.trabajo-diario-table tbody tr.bg-emerald-50 > td:nth-child(1),
+.trabajo-diario-table tbody tr.bg-emerald-50 > td:nth-child(2),
+.trabajo-diario-table tbody tr.bg-emerald-50 > .trabajo-diario-action-cell {
+  background: #ecfdf5 !important;
+}
+
+.trabajo-diario-table tbody tr.bg-amber-50 > td:nth-child(1),
+.trabajo-diario-table tbody tr.bg-amber-50 > td:nth-child(2),
+.trabajo-diario-table tbody tr.bg-amber-50 > .trabajo-diario-action-cell {
+  background: #fffbeb !important;
+}
+
+.trabajo-diario-table tbody tr.bg-rose-50 > td:nth-child(1),
+.trabajo-diario-table tbody tr.bg-rose-50 > td:nth-child(2),
+.trabajo-diario-table tbody tr.bg-rose-50 > .trabajo-diario-action-cell {
+  background: #fff1f2 !important;
+}
+
+.trabajo-diario-table tbody tr.bg-red-50 > td:nth-child(1),
+.trabajo-diario-table tbody tr.bg-red-50 > td:nth-child(2),
+.trabajo-diario-table tbody tr.bg-red-50 > .trabajo-diario-action-cell {
+  background: #fef2f2 !important;
 }
 
 /* OVERRIDE FOR MODALS */
