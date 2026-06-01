@@ -644,12 +644,28 @@ function autoAssignMesas(userId, userName) {
     return { ok: false, error: 'No hay mesas de trámite activas para realizar la asignación.' };
   }
 
+  const sinMateriaColumn = `"SE DECLAR${String.fromCharCode(211)} SIN MATERIA"`;
+  const aliveCondition = `
+    ("FECHA DE CUMPLIMIENTO" IS NULL OR "FECHA DE CUMPLIMIENTO" = '')
+    AND (${sinMateriaColumn} IS NULL OR ${sinMateriaColumn} = '')
+  `;
+  const unassignedCondition = `("ID_MESA" IS NULL OR "ID_MESA" = '')`;
+  const semaphoreOnCondition = `
+    (
+      UPPER(TRIM(COALESCE("ESTATUS", ''))) IN ('REQUERIR', 'VENCIDO', 'CERRADO')
+      OR (
+        TRIM(COALESCE("ESTATUS", '')) GLOB '[0-9]*'
+        AND CAST("ESTATUS" AS REAL) >= 7
+      )
+    )
+  `;
+  const hasVistaCondition = `("FECHA DE VISTA" IS NOT NULL AND TRIM("FECHA DE VISTA") <> '')`;
+
   // Get current alive load for each active mesa
   const counts = database.prepare(`
     SELECT "ID_MESA", COUNT(*) AS cnt 
     FROM "CUMPLIMIENTOS" 
-    WHERE ("FECHA DE CUMPLIMIENTO" IS NULL OR "FECHA DE CUMPLIMIENTO" = '') 
-      AND ("SE DECLARÓ SIN MATERIA" IS NULL OR "SE DECLARÓ SIN MATERIA" = '')
+    WHERE ${aliveCondition}
       AND "ID_MESA" IS NOT NULL
     GROUP BY "ID_MESA"
   `).all();
@@ -664,16 +680,33 @@ function autoAssignMesas(userId, userName) {
     }
   });
 
-  // Get all unassigned cumplimientos
-  const unassigned = database.prepare(`
+  const requiringUnassigned = database.prepare(`
     SELECT rowid, "NÚMERO DE JUICIO" AS expediente 
     FROM "CUMPLIMIENTOS" 
-    WHERE "ID_MESA" IS NULL OR "ID_MESA" = ''
+    WHERE ${aliveCondition}
+      AND ${unassignedCondition}
+      AND ${semaphoreOnCondition}
     ORDER BY rowid ASC
   `).all();
 
-  if (unassigned.length === 0) {
-    return { ok: true, assignedCount: 0, message: 'No hay expedientes sin mesa asignada.' };
+  const vistaUnassigned = database.prepare(`
+    SELECT rowid, "NÚMERO DE JUICIO" AS expediente
+    FROM "CUMPLIMIENTOS"
+    WHERE ${aliveCondition}
+      AND ${unassignedCondition}
+      AND ${hasVistaCondition}
+      AND NOT ${semaphoreOnCondition}
+    ORDER BY rowid ASC
+  `).all();
+
+  if (requiringUnassigned.length === 0 && vistaUnassigned.length === 0) {
+    return {
+      ok: true,
+      assignedCount: 0,
+      requiringAssignedCount: 0,
+      vistaAssignedCount: 0,
+      message: 'No hay expedientes activos sin mesa para asignar en los procesos automáticos.'
+    };
   }
 
   const now = new Date().toISOString();
@@ -686,10 +719,13 @@ function autoAssignMesas(userId, userName) {
   `);
 
   let assignedCount = 0;
+  let requiringAssignedCount = 0;
+  let vistaAssignedCount = 0;
 
-  database.exec('BEGIN');
-  try {
-    for (const exp of unassigned) {
+  const assignBatch = (rows) => {
+    let batchAssignedCount = 0;
+
+    for (const exp of rows) {
       let minMesaId = null;
       let minLoad = Infinity;
 
@@ -710,14 +746,23 @@ function autoAssignMesas(userId, userName) {
 
       loadMap[minMesaId]++;
       assignedCount++;
+      batchAssignedCount++;
     }
+
+    return batchAssignedCount;
+  };
+
+  database.exec('BEGIN');
+  try {
+    requiringAssignedCount = assignBatch(requiringUnassigned);
+    vistaAssignedCount = assignBatch(vistaUnassigned);
     database.exec('COMMIT');
   } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }
 
-  return { ok: true, assignedCount };
+  return { ok: true, assignedCount, requiringAssignedCount, vistaAssignedCount };
 }
 
 /* ────────────────────────────────────────────

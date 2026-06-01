@@ -274,7 +274,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
       if (res.ok) {
         toastSuccess(
           'Asignación completada',
-          `Se asignaron equitativamente ${res.assignedCount} expediente(s) a las mesas de trámite activas.`
+          `Se asignaron ${res.assignedCount} expediente(s): ${res.requiringAssignedCount || 0} en requerimiento y ${res.vistaAssignedCount || 0} con fecha de vista.`
         );
         await loadExpedientes();
       } else {
@@ -804,7 +804,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                   <h3 className="text-sm font-bold text-slate-800">Asignación Automática Equitativa</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Distribuye de forma balanceada y equitativa todos los expedientes vivos que no tienen ninguna mesa asignada. Se calcula considerando la carga actual viva de cada mesa de trámite activa.
+                  Distribuye de forma balanceada los expedientes activos sin mesa en dos procesos: primero los que se están requiriendo y después los que tienen fecha de vista con semáforo apagado.
                 </p>
                 <button
                   onClick={handleAutoAssign}
