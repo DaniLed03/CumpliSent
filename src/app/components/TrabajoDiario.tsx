@@ -94,8 +94,8 @@ function getTrabajoSortOrderLabel(column: ReturnType<typeof getTrabajoSortColumn
 
   if (column.type === 'estatus') {
     return direction === 'ASC'
-      ? 'Verde, amarillo, rojo claro y rojo'
-      : 'Rojo, rojo claro, amarillo y verde';
+      ? 'Verde a rojo, dias habiles menor a mayor'
+      : 'Rojo a verde, dias habiles mayor a menor';
   }
 
   if (column.type === 'text') {
@@ -219,6 +219,161 @@ function getEstatusSortNumber(exp: any) {
 
 function getEstatusSortDays(exp: any) {
   return parseSortNumber(exp.diasHabilesTranscurridos) ?? parseSortNumber(exp.estatus);
+}
+
+function isTrabajoSortBlank(value: unknown) {
+  return value === null || value === undefined || String(value).trim() === '' || String(value).trim() === '-';
+}
+
+function getTrabajoRawSortValue(exp: any, key: string, mesas: MesaRecord[]) {
+  switch (key) {
+    case 'numeroOrden':
+      return exp.numeroOrden;
+    case 'juicio':
+      return exp.numeroJuicio;
+    case 'mesa': {
+      const mesa = mesas.find((item) => Number(item.ID_MESA) === Number(exp.idMesa));
+      return mesa?.MESA || '';
+    }
+    case 'persona': {
+      const mesa = mesas.find((item) => Number(item.ID_MESA) === Number(exp.idMesa));
+      return mesa?.NOMBRE || '';
+    }
+    case 'ultimoRequerimiento':
+      return exp.ultimoRequerimiento;
+    case 'diasNaturales':
+      return exp.diasNaturalesTranscurridos;
+    case 'diasHabiles':
+      return exp.diasHabilesTranscurridos;
+    case 'estatusCumplimiento':
+      return exp.estatus;
+    case 'fechaVistaCumpli':
+      return exp.fechaVistaCumpli;
+    case 'fechaVista':
+      return exp.fechaVista;
+    case 'fechaAcuerdo':
+      return exp.fechaAcuerdo;
+    case 'estatus':
+      return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
+    case 'observaciones':
+      return exp.observacionesDiario;
+    case 'capturadoPor':
+      return exp.usuarioNombre;
+    case 'fechaCaptura':
+      return exp.fechaCapturaTrabajo;
+    default:
+      return '';
+  }
+}
+
+function normalizeTrabajoSortValue(exp: any, level: TrabajoSortLevel, mesas: MesaRecord[]) {
+  const column = getTrabajoSortColumn(level.column);
+  const value = getTrabajoRawSortValue(exp, level.column, mesas);
+
+  if (level.column === 'estatusCumplimiento') {
+    const rank = getEstatusSortNumber(exp);
+    return Number.isFinite(rank) ? rank : null;
+  }
+
+  if (column.type === 'number') {
+    return parseSortNumber(value);
+  }
+
+  if (column.type === 'date') {
+    return parseSortDate(value);
+  }
+
+  return String(value ?? '').trim();
+}
+
+function compareTrabajoRowsLikeExcel(
+  left: any,
+  right: any,
+  levels: TrabajoSortLevel[],
+  mesas: MesaRecord[],
+  leftOriginalIndex: number,
+  rightOriginalIndex: number
+) {
+  const collator = new Intl.Collator('es-MX', {
+    sensitivity: 'base',
+    numeric: false,
+  });
+
+  for (const level of levels) {
+    const column = getTrabajoSortColumn(level.column);
+    const leftRaw = getTrabajoRawSortValue(left, level.column, mesas);
+    const rightRaw = getTrabajoRawSortValue(right, level.column, mesas);
+    const leftBlank = level.column === 'estatusCumplimiento'
+      ? getEstatusBand(left.estatus, left.diasHabilesTranscurridos) === 'EMPTY'
+      : isTrabajoSortBlank(leftRaw);
+    const rightBlank = level.column === 'estatusCumplimiento'
+      ? getEstatusBand(right.estatus, right.diasHabilesTranscurridos) === 'EMPTY'
+      : isTrabajoSortBlank(rightRaw);
+
+    if (leftBlank && rightBlank) {
+      continue;
+    }
+    if (leftBlank) {
+      return 1;
+    }
+    if (rightBlank) {
+      return -1;
+    }
+
+    const leftValue = normalizeTrabajoSortValue(left, level, mesas);
+    const rightValue = normalizeTrabajoSortValue(right, level, mesas);
+    let comparison = 0;
+
+    if (level.column === 'estatusCumplimiento') {
+      const leftRank = Number(leftValue);
+      const rightRank = Number(rightValue);
+      comparison = leftRank < rightRank ? -1 : leftRank > rightRank ? 1 : 0;
+
+      if (comparison === 0) {
+        const leftDays = getEstatusSortDays(left);
+        const rightDays = getEstatusSortDays(right);
+
+        if (leftDays === null && rightDays !== null) {
+          comparison = 1;
+        } else if (leftDays !== null && rightDays === null) {
+          comparison = -1;
+        } else if (leftDays !== null && rightDays !== null) {
+          comparison = leftDays < rightDays ? -1 : leftDays > rightDays ? 1 : 0;
+        }
+      }
+    } else if (column.type === 'text' || column.type === 'estatus') {
+      comparison = collator.compare(String(leftValue), String(rightValue));
+    } else {
+      const leftNumber = Number(leftValue);
+      const rightNumber = Number(rightValue);
+      comparison = leftNumber < rightNumber ? -1 : leftNumber > rightNumber ? 1 : 0;
+    }
+
+    if (comparison !== 0) {
+      return level.direction === 'DESC' ? -comparison : comparison;
+    }
+  }
+
+  return leftOriginalIndex - rightOriginalIndex;
+}
+
+function sortTrabajoRowsLikeExcel(rows: any[], levels: TrabajoSortLevel[], mesas: MesaRecord[]) {
+  const activeLevels = levels.slice(0, 64).filter((level) => level.column);
+  if (activeLevels.length === 0) {
+    return rows;
+  }
+
+  return rows
+    .map((row, originalIndex) => ({ row, originalIndex }))
+    .sort((left, right) => compareTrabajoRowsLikeExcel(
+      left.row,
+      right.row,
+      activeLevels,
+      mesas,
+      left.originalIndex,
+      right.originalIndex
+    ))
+    .map(({ row }) => row);
 }
 
 function StatusBadgeSemaforo({
@@ -435,7 +590,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       case 'estatus': return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
       case 'observaciones': return String(exp.observacionesDiario || '');
       case 'capturadoPor': return String(exp.usuarioNombre || '');
-      case 'fechaCaptura': return exp.fechaCapturaDiario ? new Date(exp.fechaCapturaDiario).toLocaleString() : '-';
+      case 'fechaCaptura': return exp.fechaCapturaTrabajo ? new Date(exp.fechaCapturaTrabajo).toLocaleString() : '-';
       default: return '';
     }
   }, [mesas]);
@@ -745,17 +900,9 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       setUsers(u || []);
 
       // Load expedientes vivos
-      // If user has view_all_mesas, call getExpedientesAllMesas.
-      // Otherwise, if user has view_my_mesa, call getExpedientesByMesa.
       let rows: any[] = [];
-      if (can('trabajo.view_all_mesas')) {
+      if (can('view.trabajo_diario')) {
         rows = await window.api.getExpedientesAllMesas();
-      } else if (can('trabajo.view_my_mesa')) {
-        if (session?.user?.IdMesa) {
-          rows = await window.api.getExpedientesByMesa(session.user.IdMesa);
-        } else {
-          rows = []; // No mesa assigned
-        }
       }
       setExpedientes(rows || []);
       if (opts?.showSuccessToast) {
@@ -914,57 +1061,23 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
 
   // Filter vivo list in UI
 
-  const sortedExpedientes = useMemo(() => {
-    let result = [...filteredExpedientesExcel];
-    for (let i = sortLevels.length - 1; i >= 0; i--) {
-      const { column, direction } = sortLevels[i];
-      result.sort((a, b) => {
-        let valA = getTableFilterValue(a, column);
-        let valB = getTableFilterValue(b, column);
+  const filteredExpedientes = useMemo(() => {
+    const search = searchQuery.toLowerCase();
+    const filtered = filteredExpedientesExcel.filter((exp: any) => {
+      const matchesSearch =
+        String(exp.numeroJuicio || '').toLowerCase().includes(search) ||
+        String(exp.numeroOrden || '').includes(search);
 
-        if (column === 'diasNaturales' || column === 'diasHabiles' || column === 'numeroOrden') {
-          const numA = parseSortNumber(valA) ?? -Infinity;
-          const numB = parseSortNumber(valB) ?? -Infinity;
-          return direction === 'ASC' ? numA - numB : numB - numA;
-        }
+      const matchesMesa =
+        !can('view.trabajo_diario') ||
+        !selectedMesaFilter ||
+        Number(exp.idMesa) === Number(selectedMesaFilter);
 
-        if (column === 'estatusCumplimiento') {
-          const rankA = getEstatusSortNumber(a);
-          const rankB = getEstatusSortNumber(b);
-          if (rankA !== rankB) {
-            return direction === 'ASC' ? rankA - rankB : rankB - rankA;
-          }
-          const daysA = getEstatusSortDays(a) ?? Number.POSITIVE_INFINITY;
-          const daysB = getEstatusSortDays(b) ?? Number.POSITIVE_INFINITY;
-          return direction === 'ASC' ? daysA - daysB : daysB - daysA;
-        }
+      return matchesSearch && matchesMesa;
+    });
 
-        if (column === 'fechaAcuerdo' || column === 'fechaCaptura' || column === 'ultimoRequerimiento' || column === 'fechaVistaCumpli' || column === 'fechaVista') {
-          const numA = parseSortDate(valA) ?? -Infinity;
-          const numB = parseSortDate(valB) ?? -Infinity;
-          return direction === 'ASC' ? numA - numB : numB - numA;
-        }
-
-        const strA = String(valA || '').toLowerCase();
-        const strB = String(valB || '').toLowerCase();
-        return direction === 'ASC' ? strA.localeCompare(strB) : strB.localeCompare(strA);
-      });
-    }
-    return result;
-  }, [filteredExpedientesExcel, sortLevels, getTableFilterValue]);
-
-  const filteredExpedientes = sortedExpedientes.filter((exp: any) => {
-    const matchesSearch = 
-      String(exp.numeroJuicio || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(exp.numeroOrden || '').includes(searchQuery);
-
-    const matchesMesa = 
-      !can('trabajo.view_all_mesas') || 
-      !selectedMesaFilter || 
-      Number(exp.idMesa) === Number(selectedMesaFilter);
-
-    return matchesSearch && matchesMesa;
-  });
+    return sortTrabajoRowsLikeExcel(filtered, sortLevels, mesas);
+  }, [filteredExpedientesExcel, sortLevels, mesas, searchQuery, selectedMesaFilter, can]);
 
   const getRowColor = (exp: any) => {
     switch (getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos)) {
@@ -1018,7 +1131,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       {activeTab === 'vivos' && (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
           {/* User message if view_my_mesa but no mesa configuration */}
-          {!can('trabajo.view_all_mesas') && can('trabajo.view_my_mesa') && !session?.user?.IdMesa && (
+          {false && (
             <div className="flex items-center gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 text-xs flex-shrink-0">
               <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
               <div>
@@ -1044,7 +1157,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     />
                   </div>
 
-                  {can('trabajo.view_all_mesas') && (
+                  {can('view.trabajo_diario') && (
                     <div
                       className="relative"
                       style={{ width: 440, minWidth: 360, maxWidth: 'calc(100vw - 620px)' }}

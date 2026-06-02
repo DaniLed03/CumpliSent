@@ -35,6 +35,8 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
   const [openPortDropdown, setOpenPortDropdown] = useState(false);
   const [databasePath, setDatabasePath] = useState('');
   const [showStopModal, setShowStopModal] = useState(false);
+  const [clients, setClients] = useState<ServerClientRecord[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -70,11 +72,31 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
     }
   }, []);
 
+  const refreshClients = useCallback(async () => {
+    setLoadingClients(true);
+    try {
+      const rows = await window.api.listServerClients();
+      setClients(Array.isArray(rows) ? rows : []);
+    } catch {
+      setClients([]);
+    } finally {
+      setLoadingClients(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshStatus();
     scanPorts();
     refreshDatabasePath();
-  }, [refreshStatus, scanPorts, refreshDatabasePath]);
+    refreshClients();
+  }, [refreshStatus, scanPorts, refreshDatabasePath, refreshClients]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refreshClients();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshClients]);
 
   useEffect(() => {
     if (!openPortDropdown) return undefined;
@@ -157,9 +179,24 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
   }
 
   const intranetUrl = status.urls.find((u) => u.type === 'lan')?.url || '';
+  const connectedCount = clients.filter((client) => client.Conectado).length;
+  const formatLastSeen = (value: string) => {
+    if (!value) return 'Sin actividad reciente';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Sin actividad reciente';
+    return date.toLocaleString('es-MX', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  };
 
   return (
-    <div className="space-y-4 w-full h-full pb-4">
+    <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       
       {/* Header section with gradient */}
       <div className="bg-gradient-to-br from-slate-900 to-[#1e40af] rounded-2xl shadow-lg p-4 md:p-5 text-white overflow-hidden relative">
@@ -207,8 +244,8 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
       </div>
 
       {/* Main Configuration Container */}
-      <div className="space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md">
           
           {/* Network Section */}
           {!status.running && (
@@ -385,10 +422,8 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
             </div>
           )}
 
-          <div className="border-t border-slate-200"></div>
-
           {/* Database Section */}
-          <div className="flex flex-col">
+          <div className="flex flex-col border-t border-slate-200">
             <div className="p-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
@@ -432,6 +467,81 @@ export default function ServerConfig({ canManage = true }: { canManage?: boolean
               </div>
             </div>
           </div>
+
+          {/* Connected users */}
+          <div className="flex min-h-0 flex-1 flex-col border-t border-slate-200">
+            <div className="p-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                  <Monitor className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm text-slate-800">Usuarios del sistema</h3>
+                  <p className="text-[10px] text-slate-500">
+                    {connectedCount} conectado(s) de {clients.length} usuario(s) registrados
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={refreshClients}
+                disabled={loadingClients}
+                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                title="Actualizar usuarios"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingClients ? 'animate-spin text-blue-600' : ''}`} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 p-4">
+              <div className="h-full min-h-0 overflow-auto rounded-xl border border-slate-200 shadow-sm">
+                <table className="w-full min-w-[860px] text-xs">
+                  <thead className="sticky top-0 z-10 bg-[#1e40af] text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Nombre</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Rol</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Estatus</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Usuario</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Ultima actividad</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Equipo / IP</th>
+                      <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px]">Cuenta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {clients.map((client) => (
+                      <tr key={client.IdUsuario} className={client.Conectado ? 'bg-green-50/40 hover:bg-green-50' : 'hover:bg-slate-50'}>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-800">{client.NombreCompleto || client.Usuario}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 font-semibold">{client.Rol || '-'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-2 font-bold ${client.Conectado ? 'text-green-700' : 'text-red-600'}`}>
+                            <span className={`h-2.5 w-2.5 rounded-full ${client.Conectado ? 'bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.16)]' : 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.14)]'}`} />
+                            {client.Conectado ? 'En linea' : 'Desconectado'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-600">{client.Usuario}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatLastSeen(client.UltimaActividad)}</td>
+                        <td className="px-4 py-3 text-slate-600 font-mono">{client.Direccion || '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-bold ${client.Activo ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                            {client.Activo ? 'Activa' : 'Inactiva'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {clients.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                          No hay usuarios registrados para mostrar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* System Logs / Error box */}

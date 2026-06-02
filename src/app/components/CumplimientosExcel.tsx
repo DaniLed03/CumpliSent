@@ -1906,7 +1906,6 @@ export default function CumplimientosExcel({
       'ultimoRequerimiento',
       'seDeclaroSinMateria',
       'fechaVista',
-      'fechaVistaCumpli',
       'revisionContraSentencia',
       'fechaCumplimiento',
       'fechaArchivo',
@@ -2416,7 +2415,7 @@ export default function CumplimientosExcel({
             <span className="lg:hidden">AGREGAR POR RANGO</span>
           </button>
         )}
-        {can('cumplimientos.recalculate') && (
+        {can('cumplimientos.update_from_sentencias') && (
           <button
             onClick={() => setShowModalActualizar(true)}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-700 border border-indigo-800 text-white rounded text-[11px] md:text-xs font-semibold shadow-sm hover:bg-indigo-800 transition-colors"
@@ -2914,7 +2913,7 @@ export default function CumplimientosExcel({
                   </td>
                   <td className="px-2 py-1.5 text-center">
                     <div className="flex justify-center gap-1">
-                      <button
+                      {can('cumplimientos.details') && <button
                         onClick={(event) => {
                           event.stopPropagation();
                           setSelectedRowId(exp.id);
@@ -2924,8 +2923,8 @@ export default function CumplimientosExcel({
                         title="Ver detalle"
                       >
                         <Eye className="w-3 h-3 text-blue-600" />
-                      </button>
-                      {can('cumplimientos.edit') && (
+                      </button>}
+                      {can('cumplimientos.delete') && (
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
@@ -3745,7 +3744,7 @@ export default function CumplimientosExcel({
                   {renderEditableField('Ultima Ejecutoria', 'ultEjecutoria', { type: 'date', readOnly: true })}
                   {renderEditableField('Último Requerimiento', 'ultimoRequerimiento', { type: 'date' })}
                   {(isEditing || selectedExpediente.fechaVista) && renderEditableField('Fecha Recibe Juzgado', 'fechaVista', { type: 'date' })}
-                  {(isEditing || selectedExpediente.fechaVistaCumpli) && renderEditableField('Fecha Vista Cumpli', 'fechaVistaCumpli', { type: 'date' })}
+                  {selectedExpediente.fechaVistaCumpli && renderEditableField('Fecha Vista Cumpli', 'fechaVistaCumpli', { type: 'date', readOnly: true })}
                   {(isEditing || selectedExpediente.fechaCumplimiento) && renderEditableField('Fecha de Cumplimiento', 'fechaCumplimiento', { type: 'date' })}
                   {(isEditing || selectedExpediente.fechaArchivo) && renderEditableField('Fecha de Archivo', 'fechaArchivo', { type: 'date' })}
                 </div>

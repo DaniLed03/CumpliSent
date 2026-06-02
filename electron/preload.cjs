@@ -2,6 +2,16 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 let remoteSession = null;
 
+try {
+  const savedRemoteSession = JSON.parse(window.sessionStorage.getItem('remoteSession') || 'null');
+  if (savedRemoteSession?.apiUrl && savedRemoteSession?.token) {
+    remoteSession = {
+      apiUrl: normalizeBaseUrl(savedRemoteSession.apiUrl),
+      token: savedRemoteSession.token,
+    };
+  }
+} catch {}
+
 function normalizeBaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
 }
@@ -93,6 +103,20 @@ function clearRememberPayload() {
   } catch {}
 }
 
+function saveRemoteSession() {
+  try {
+    if (remoteSession?.apiUrl && remoteSession?.token) {
+      window.sessionStorage.setItem('remoteSession', JSON.stringify(remoteSession));
+    }
+  } catch {}
+}
+
+function clearRemoteSessionPayload() {
+  try {
+    window.sessionStorage.removeItem('remoteSession');
+  } catch {}
+}
+
 contextBridge.exposeInMainWorld('cumplimientosBackend', {
   databasePath: (...args) => getCumplimientosBackend().databasePath(...args),
   add: (...args) => getCumplimientosBackend().add(...args),
@@ -110,6 +134,7 @@ contextBridge.exposeInMainWorld('api', {
   // Auth
   bootstrapLogin: async (username, password, remember) => {
     remoteSession = null;
+    clearRemoteSessionPayload();
     const result = await ipcRenderer.invoke('auth:bootstrap-login', username, password, Boolean(remember));
     if (result?.ok && result.rememberToken) {
       saveRememberPayload({
@@ -126,6 +151,7 @@ contextBridge.exposeInMainWorld('api', {
   login: async (...args) => {
     if (args.length <= 3) {
       remoteSession = null;
+      clearRemoteSessionPayload();
       const result = await ipcRenderer.invoke('auth:login', args[0], args[1], Boolean(args[2]));
       if (result?.ok && result.rememberToken) {
         saveRememberPayload({
@@ -144,6 +170,7 @@ contextBridge.exposeInMainWorld('api', {
     const result = await ipcRenderer.invoke('auth:http-login', apiUrl, args[1], args[2], Boolean(args[3]));
     if (result?.ok && result.token) {
       remoteSession = { apiUrl, token: result.token };
+      saveRemoteSession();
       if (result.rememberToken) {
         saveRememberPayload({
           mode: 'remote',
@@ -160,6 +187,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   clearRemoteSession: () => {
     remoteSession = null;
+    clearRemoteSessionPayload();
     clearRememberPayload();
   },
   rememberLogin: async () => {
@@ -178,8 +206,10 @@ contextBridge.exposeInMainWorld('api', {
       const result = await ipcRenderer.invoke('auth:http-remember-login', apiUrl, saved.token);
       if (result?.ok && result.token) {
         remoteSession = { apiUrl, token: result.token };
+        saveRemoteSession();
         return { ...result, apiUrl };
       }
+      clearRemoteSessionPayload();
       clearRememberPayload();
       return result;
     }
@@ -195,9 +225,27 @@ contextBridge.exposeInMainWorld('api', {
     const apiUrl = normalizeBaseUrl(url);
     const result = await ipcRenderer.invoke('auth:verify-token', apiUrl, token);
     if (result?.ok) {
-      remoteSession = { apiUrl, token };
+      remoteSession = { apiUrl, token: result.token || token };
+      saveRemoteSession();
     }
     return result;
+  },
+  restoreRemoteSession: async () => {
+    if (!remoteSession?.apiUrl || !remoteSession?.token) {
+      return { ok: false };
+    }
+    try {
+      const result = await remoteRequest('/api/verify');
+      if (result?.ok && result.token) {
+        remoteSession = { apiUrl: remoteSession.apiUrl, token: result.token };
+        saveRemoteSession();
+      }
+      return { ...result, apiUrl: remoteSession.apiUrl };
+    } catch {
+      remoteSession = null;
+      clearRemoteSessionPayload();
+      return { ok: false };
+    }
   },
   checkLicense: () => ipcRenderer.invoke('license:check'),
   activateLicense: (serial) => ipcRenderer.invoke('license:activate', serial),
@@ -210,6 +258,9 @@ contextBridge.exposeInMainWorld('api', {
   serverStatus: () => ipcRenderer.invoke('server:status'),
   scanPorts: () => ipcRenderer.invoke('server:scan-ports'),
   networkUrls: (port) => ipcRenderer.invoke('server:network-urls', port),
+  listServerClients: async () => remoteSession
+    ? (await remoteRequest('/api/server/clients')).clients
+    : ipcRenderer.invoke('server:clients'),
 
   // User management
   listUsers: async () => remoteSession
@@ -233,6 +284,9 @@ contextBridge.exposeInMainWorld('api', {
   listRolesWithPermissions: async () => remoteSession
     ? (await remoteRequest('/api/roles-with-permissions')).roles
     : ipcRenderer.invoke('roles:with-permissions'),
+  getRolesRevision: async () => remoteSession
+    ? (await remoteRequest('/api/roles-revision')).revision
+    : ipcRenderer.invoke('roles:revision'),
   createRole: async (roleData) => remoteSession
     ? await remoteRequest('/api/roles', { method: 'POST', body: JSON.stringify(roleData) })
     : ipcRenderer.invoke('roles:create', roleData),

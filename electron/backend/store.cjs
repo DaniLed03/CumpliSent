@@ -129,6 +129,8 @@ function initializeDatabase(database) {
     });
     database.exec('PRAGMA user_version = 1');
   }
+
+  syncFechaVistaCumpliWithFechaVista(database);
 }
 
 function tableInfo(database, tableName) {
@@ -229,6 +231,15 @@ function runTransaction(database, callback, items) {
   }
 }
 
+function syncFechaVistaCumpliWithFechaVista(database) {
+  database.prepare(`
+    UPDATE ${quoteIdentifier('CUMPLIMIENTOS')}
+    SET ${quoteIdentifier('FECHA VISTA CUMPLI')} = ''
+    WHERE ${quoteIdentifier('FECHA DE VISTA')} IS NULL
+       OR TRIM(${quoteIdentifier('FECHA DE VISTA')}) = ''
+  `).run();
+}
+
 function buildInsertCumplimientoStatement(database) {
   const columns = CUMPLIMIENTOS_COLUMNS.map(([, columnName]) => quoteIdentifier(columnName)).join(', ');
   const placeholders = CUMPLIMIENTOS_COLUMNS.map(() => '?').join(', ');
@@ -240,8 +251,13 @@ function buildInsertCumplimientoStatement(database) {
 }
 
 function toDatabaseRow(row) {
+  const normalizedRow = {
+    ...row,
+    fechaVistaCumpli: row.fechaVista ? row.fechaVistaCumpli : '',
+  };
+
   return CUMPLIMIENTOS_COLUMNS.map(([property, , type]) => {
-    let value = row[property];
+    let value = normalizedRow[property];
     if (type === 'DATE' && typeof value === 'string' && value) {
       const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (match) {
@@ -553,17 +569,47 @@ function getCumplimientoColumnNames() {
 function patchCumplimiento(id, patch = {}) {
   const database = getDb();
 
-  // Traducir claves camelCase a nombres de columna SQL
   const columnMap = Object.fromEntries(
     CUMPLIMIENTOS_COLUMNS.map(([property, columnName]) => [property, columnName])
   );
 
+  const numericId = Number(id);
+  let rowid;
+
+  if (Number.isFinite(numericId) && numericId > 0) {
+    rowid = numericId;
+  } else {
+    const found = database
+      .prepare(`SELECT rowid FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE ${quoteIdentifier('NÚMERO DE JUICIO')} = ? LIMIT 1`)
+      .get(id);
+    if (!found) throw new Error(`No se encontró el expediente con id/juicio: ${id}`);
+    rowid = found.rowid;
+  }
+
+  const currentRow = database
+    .prepare(`SELECT rowid, * FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE rowid = ?`)
+    .get(rowid);
+  if (!currentRow) return null;
+
+  const current = fromDatabaseRow(currentRow, 0);
+  const effectivePatch = { ...patch };
+  const fechaVistaWasModified = Object.prototype.hasOwnProperty.call(effectivePatch, 'fechaVista');
+  const effectiveFechaVista = fechaVistaWasModified
+    ? normalizarCumplimiento({ fechaVista: effectivePatch.fechaVista }, 0).fechaVista
+    : current.fechaVista;
+
+  if (!fechaVistaWasModified && Object.prototype.hasOwnProperty.call(effectivePatch, 'fechaVistaCumpli')) {
+    delete effectivePatch.fechaVistaCumpli;
+  } else if (!effectiveFechaVista) {
+    effectivePatch.fechaVistaCumpli = '';
+  }
+
   const setClauses = [];
   const values = [];
 
-  for (const [property, value] of Object.entries(patch)) {
+  for (const [property, value] of Object.entries(effectivePatch)) {
     const columnName = columnMap[property];
-    if (!columnName) continue; // ignora campos desconocidos
+    if (!columnName) continue;
     setClauses.push(`${quoteIdentifier(columnName)} = ?`);
     const colDef = CUMPLIMIENTOS_COLUMNS.find(([prop]) => prop === property);
     let valToSave = value;
@@ -577,22 +623,7 @@ function patchCumplimiento(id, patch = {}) {
   }
 
   if (setClauses.length === 0) {
-    return null; // nada que actualizar
-  }
-
-  // El id puede ser el rowid o el numero de juicio; intentar rowid primero
-  const numericId = Number(id);
-  let rowid;
-
-  if (Number.isFinite(numericId) && numericId > 0) {
-    rowid = numericId;
-  } else {
-    // Buscar por NÚMERO DE JUICIO
-    const found = database
-      .prepare(`SELECT rowid FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE ${quoteIdentifier('NÚMERO DE JUICIO')} = ? LIMIT 1`)
-      .get(id);
-    if (!found) throw new Error(`No se encontró el expediente con id/juicio: ${id}`);
-    rowid = found.rowid;
+    return null;
   }
 
   values.push(rowid);
@@ -600,7 +631,8 @@ function patchCumplimiento(id, patch = {}) {
     .prepare(`UPDATE ${quoteIdentifier('CUMPLIMIENTOS')} SET ${setClauses.join(', ')} WHERE rowid = ?`)
     .run(...values);
 
-  // Devolver la fila actualizada
+  syncFechaVistaCumpliWithFechaVista(database);
+
   const updated = database
     .prepare(`SELECT rowid, * FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE rowid = ?`)
     .get(rowid);
@@ -610,7 +642,6 @@ function patchCumplimiento(id, patch = {}) {
   const normalizado = normalizarCumplimiento(fromDatabaseRow(updated, 0), 0);
   return calcularCumplimiento(normalizado, inhabiles);
 }
-
 function deleteCumplimiento(id) {
   const database = getDb();
   const numericId = Number(id);
@@ -644,3 +675,4 @@ module.exports = {
   replaceDiasInhabiles,
   updateCumplimientosDesdeSentencias,
 };
+

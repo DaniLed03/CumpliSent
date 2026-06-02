@@ -375,12 +375,15 @@ export function NuevoRolModal({
 }) {
   const [nombreRol, setNombreRol] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const initialRoleKey = initialData
+    ? `${initialData.NombreRol}|${(initialData.Permisos || []).join('|')}`
+    : 'new';
 
   useEffect(() => {
     if (!isOpen) return;
     setNombreRol(initialData?.NombreRol || '');
     setSelected(initialData?.Permisos || []);
-  }, [isOpen, initialData]);
+  }, [isOpen, initialRoleKey]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, PermissionOption[]> = {};
@@ -392,6 +395,16 @@ export function NuevoRolModal({
     return groups;
   }, [permissions]);
 
+  const viewByCategory: Record<string, string> = {
+    CUMPLIMIENTOS: 'view.cumplimientos',
+    'DIAS INHABILES': 'view.dias_inhabiles',
+    SERVIDOR: 'view.servidor',
+    USUARIOS: 'view.usuarios',
+    'ROLES Y PERMISOS': 'view.roles',
+    'MESAS DE TRAMITE': 'view.mesas',
+    'TRABAJO DIARIO': 'view.trabajo_diario',
+  };
+
   function toggle(permissionId: string) {
     if (!canAssignPermissions) return;
     setSelected((current) => {
@@ -401,26 +414,9 @@ export function NuevoRolModal({
         : current.filter((id) => id !== permissionId);
       
       if (!isChecking) {
-        if (permissionId === 'view.cumplimientos') {
-          next = next.filter(id => !grouped['CUMPLIMIENTOS']?.find(p => p.IdPermiso === id));
-        } else if (permissionId === 'view.dias_inhabiles') {
-          next = next.filter(id => !grouped['DIAS INHABILES']?.find(p => p.IdPermiso === id));
-        } else if (permissionId === 'view.servidor') {
-          next = next.filter(id => !grouped['SERVIDOR']?.find(p => p.IdPermiso === id));
-        } else if (permissionId === 'view.usuarios') {
-          next = next.filter(id => !grouped['USUARIOS']?.find(p => p.IdPermiso === id));
-        } else if (permissionId === 'view.roles') {
-          next = next.filter(id => !grouped['ROLES Y PERMISOS']?.find(p => p.IdPermiso === id));
-        } else if (permissionId === 'mesas.view') {
-          next = next.filter(id => id === 'mesas.view' || !grouped['MESAS DE TRÁMITE']?.find(p => p.IdPermiso === id));
-        }
-        
-        if (permissionId === 'trabajo.view_my_mesa' || permissionId === 'trabajo.view_all_mesas') {
-          const hasMyMesa = next.includes('trabajo.view_my_mesa');
-          const hasAllMesas = next.includes('trabajo.view_all_mesas');
-          if (!hasMyMesa && !hasAllMesas) {
-            next = next.filter(id => id === 'trabajo.view_my_mesa' || id === 'trabajo.view_all_mesas' || !grouped['TRABAJO DIARIO']?.find(p => p.IdPermiso === id));
-          }
+        const categoryToDisable = Object.entries(viewByCategory).find(([, viewPermission]) => viewPermission === permissionId)?.[0];
+        if (categoryToDisable) {
+          next = next.filter(id => !grouped[categoryToDisable]?.some(p => p.IdPermiso === id));
         }
       }
       return next;
@@ -474,19 +470,9 @@ export function NuevoRolModal({
 
             <div className="space-y-4">
               {Object.entries(grouped).map(([category, items]) => {
-                if (category === 'CUMPLIMIENTOS' && !selected.includes('view.cumplimientos')) return null;
-                if (category === 'DIAS INHABILES' && !selected.includes('view.dias_inhabiles')) return null;
-                if (category === 'SERVIDOR' && !selected.includes('view.servidor')) return null;
-                if (category === 'USUARIOS' && !selected.includes('view.usuarios')) return null;
-                if (category === 'ROLES Y PERMISOS' && !selected.includes('view.roles')) return null;
-                
-                let visibleItems = items;
-                if (category === 'MESAS DE TRÁMITE' && !selected.includes('mesas.view')) {
-                  visibleItems = items.filter(p => p.IdPermiso === 'mesas.view');
-                }
-                if (category === 'TRABAJO DIARIO' && !selected.includes('trabajo.view_my_mesa') && !selected.includes('trabajo.view_all_mesas')) {
-                  visibleItems = items.filter(p => p.IdPermiso === 'trabajo.view_my_mesa' || p.IdPermiso === 'trabajo.view_all_mesas');
-                }
+                const requiredView = viewByCategory[category];
+                if (requiredView && category !== 'VISTAS' && !selected.includes(requiredView)) return null;
+                const visibleItems = items;
                 if (visibleItems.length === 0) return null;
 
                 return (

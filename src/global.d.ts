@@ -74,6 +74,13 @@ declare global {
         token: string,
       ) => Promise<{
         ok: boolean;
+        token?: string;
+        user?: SessionUser;
+      }>;
+      restoreRemoteSession?: () => Promise<{
+        ok: boolean;
+        token?: string;
+        apiUrl?: string;
         user?: SessionUser;
       }>;
       clearRemoteSession?: () => void;
@@ -110,6 +117,7 @@ declare global {
       }>;
       scanPorts: () => Promise<number[]>;
       networkUrls: (port: number) => Promise<NetworkUrl[]>;
+      listServerClients: () => Promise<ServerClientRecord[]>;
       // User management
       listUsers: () => Promise<UserRecord[]>;
       createUser: (userData: {
@@ -132,6 +140,7 @@ declare global {
       listRoles: () => Promise<RoleRecord[]>;
       listPermissions: () => Promise<PermissionRecord[]>;
       listRolesWithPermissions: () => Promise<RoleWithPermissionsRecord[]>;
+      getRolesRevision?: () => Promise<number>;
       createRole: (roleData: {
         NombreRol: string;
         Permisos?: string[];
@@ -202,6 +211,13 @@ declare global {
     Rol: string;
     Activo: boolean;
     FechaCreacion: string;
+  }
+
+  interface ServerClientRecord extends UserRecord {
+    Conectado: boolean;
+    UltimaActividad: string;
+    Direccion: string;
+    Cliente: string;
   }
 
   interface RoleRecord {

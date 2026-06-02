@@ -185,6 +185,14 @@ function upperText(value) {
 }
 
 function normalizarCumplimiento(row, index = 0) {
+  const fechaVista = toIsoDate(row.fechaVista);
+  const fechaVistaCumpli = fechaVista
+    ? (
+        toIsoDate(row.fechaVistaCumpli) ||
+        toIsoDate(extractAroundPhrase(row.observaciones, 'CUMPLIMIENTO DE LA RESPONSABLE', 31))
+      )
+    : '';
+
   return {
     id: String(row.id || row.numeroJuicio || index + 1),
     numeroOrden: Number(row.numeroOrden || index + 1),
@@ -201,10 +209,8 @@ function normalizarCumplimiento(row, index = 0) {
     diasHabilesTranscurridos: row.diasHabilesTranscurridos ?? '',
     estatus: upperText(row.estatus),
     seDeclaroSinMateria: toIsoDate(row.seDeclaroSinMateria),
-    fechaVista: toIsoDate(row.fechaVista),
-    fechaVistaCumpli:
-      toIsoDate(row.fechaVistaCumpli) ||
-      toIsoDate(extractAroundPhrase(row.observaciones, 'CUMPLIMIENTO DE LA RESPONSABLE', 31)),
+    fechaVista,
+    fechaVistaCumpli,
     revisionContraSentencia: toIsoDate(row.revisionContraSentencia),
     fechaCumplimiento: toIsoDate(row.fechaCumplimiento),
     fechaArchivo: toIsoDate(row.fechaArchivo),
@@ -282,6 +288,7 @@ function calcularCumplimiento(row, diasInhabiles = []) {
     estatus,
     seDeclaroSinMateria: sinMateriaValida,
     fechaVista: fechaVistaValida,
+    fechaVistaCumpli: fechaVistaValida ? row.fechaVistaCumpli : '',
     fechaCumplimiento: fechaCumplimientoValida,
     cumplimientoMenorFechaEjecutoria: cumplimientoAlerta,
     vistaMayorUltEjecutoria: vistaValidacion,
@@ -428,6 +435,16 @@ function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
     revisionContraSentencia = existente.revisionContraSentencia || '';
   }
 
+  const fechaVista = sourceDateValue(pick(sentencia, ['VISTA']), lastTen) || existente.fechaVista;
+  const fechaVistaCumpli = fechaVista
+    ? (
+        sourceDateValue(
+          pick(sentencia, ['FECHA VISTA CUMPLI', 'VISTA CUMPLI']) ||
+            extractAroundPhrase(pick(sentencia, ['OBSERVACIONES']), 'CUMPLIMIENTO DE LA RESPONSABLE', 31)
+        ) || existente.fechaVistaCumpli
+      )
+    : '';
+
   return normalizarCumplimiento({
     ...existente,
     id: existente.id || expediente || index + 1,
@@ -448,11 +465,8 @@ function sentenciaToCumplimiento(sentencia, existente = {}, index = 0) {
       pick(sentencia, ['FEC. SIN MATERIA', 'FEC SIN MATERIA', 'FECHA SIN MATERIA']),
       lastTen
     ) || existente.seDeclaroSinMateria,
-    fechaVista: sourceDateValue(pick(sentencia, ['VISTA']), lastTen) || existente.fechaVista,
-    fechaVistaCumpli: sourceDateValue(
-      pick(sentencia, ['FECHA VISTA CUMPLI', 'VISTA CUMPLI']) ||
-        extractAroundPhrase(pick(sentencia, ['OBSERVACIONES']), 'CUMPLIMIENTO DE LA RESPONSABLE', 31)
-    ) || existente.fechaVistaCumpli,
+    fechaVista,
+    fechaVistaCumpli,
     revisionContraSentencia,
     fechaCumplimiento:
       sourceDateValue(pick(sentencia, [

@@ -10,6 +10,7 @@ const {
   listRoles,
   listRolesWithPermissions,
   listUsers,
+  getRolesRevision,
   updateRole,
   deleteRole,
   updateUser,
@@ -25,6 +26,7 @@ const {
 } = require('./license-store.cjs');
 const {
   getNetworkUrls,
+  listServerClients,
   getServerStatus,
   scanPorts,
   startServer,
@@ -184,6 +186,10 @@ function registerAuthHandlers() {
     return getNetworkUrls(Number(port) || 3000);
   });
 
+  ipcMain.handle('server:clients', async () => {
+    return listServerClients();
+  });
+
   /* ────────────────────────────────────────
    * User management (IPC direct, for admin panel)
    * ──────────────────────────────────────── */
@@ -213,6 +219,10 @@ function registerAuthHandlers() {
 
   ipcMain.handle('roles:with-permissions', async () => {
     return listRolesWithPermissions();
+  });
+
+  ipcMain.handle('roles:revision', async () => {
+    return getRolesRevision();
   });
 
   ipcMain.handle('roles:create', async (_event, roleData) => {

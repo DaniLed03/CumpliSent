@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import logoImg from "../assets/Cumplisent.png";
 import {
@@ -78,8 +78,8 @@ const VIEW_PERMISSIONS: Record<ViewKey, string> = {
   servidor: "view.servidor",
   usuarios: "view.usuarios",
   roles: "view.roles",
-  mesas: "mesas.view",
-  "trabajo-diario": "trabajo.view_my_mesa",
+  mesas: "view.mesas",
+  "trabajo-diario": "view.trabajo_diario",
 };
 
 function getBackend() {
@@ -549,11 +549,17 @@ function ProcesarView() {
 function DiasInhabilesView({
   diasInhabiles,
   setDiasInhabiles,
-  canManage,
+  canAdd,
+  canImport,
+  canEdit,
+  canDelete,
 }: {
   diasInhabiles: DiaInhabil[];
   setDiasInhabiles: (dias: DiaInhabil[]) => void;
-  canManage: boolean;
+  canAdd: boolean;
+  canImport: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const [nuevaFecha, setNuevaFecha] = useState("");
   const [excelFile, setExcelFile] = useState<File | null>(null);
@@ -752,11 +758,13 @@ function DiasInhabilesView({
     }
   };
 
+  const canModifyRows = canEdit || canDelete;
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-5 p-2">
-      {canManage && (
+      {(canAdd || canImport) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 flex-shrink-0 items-start">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          {canAdd && <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
                 <Calendar className="w-4 h-4 text-blue-600" />
@@ -784,9 +792,9 @@ function DiasInhabilesView({
                 </button>
               </div>
             </div>
-          </div>
+          </div>}
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 relative">
+          {canImport && <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 relative">
 
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
@@ -833,7 +841,7 @@ function DiasInhabilesView({
                 </p>
               )}
             </div>
-          </div>
+          </div>}
         </div>
       )}
 
@@ -859,7 +867,7 @@ function DiasInhabilesView({
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider">
                     Días Inhábiles
                   </th>
-                  {canManage && (
+                  {canModifyRows && (
                     <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider w-32">
                       Acciones
                     </th>
@@ -869,7 +877,7 @@ function DiasInhabilesView({
               <tbody className="divide-y divide-slate-100">
                 {diasInhabiles.length === 0 ? (
                   <tr>
-                    <td colSpan={canManage ? 2 : 1} className="px-5 py-8 text-center text-slate-500 bg-slate-50/50">
+                    <td colSpan={canModifyRows ? 2 : 1} className="px-5 py-8 text-center text-slate-500 bg-slate-50/50">
                       No hay días inhábiles registrados.
                     </td>
                   </tr>
@@ -882,10 +890,10 @@ function DiasInhabilesView({
                       <td className="px-5 py-3 font-medium text-slate-700">
                         {formatDate(dia.fecha)}
                       </td>
-                      {canManage && (
+                      {canModifyRows && (
                         <td className="px-5 py-3">
                           <div className="flex items-center justify-center gap-2">
-                            <button
+                            {canEdit && <button
                               onClick={() => {
                                 setDiaEditando(dia);
                                 setFechaEditando(dia.fecha);
@@ -894,14 +902,14 @@ function DiasInhabilesView({
                               title="Editar"
                             >
                               <Edit className="w-4 h-4" />
-                            </button>
-                            <button
+                            </button>}
+                            {canDelete && <button
                               onClick={() => handleEliminar(dia)}
                               className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors border border-transparent hover:border-red-100"
                               title="Eliminar"
                             >
                               <Trash2 className="w-4 h-4" />
-                            </button>
+                            </button>}
                           </div>
                         </td>
                       )}
@@ -1005,6 +1013,7 @@ export default function App() {
     token?: string;
     apiUrl?: string;
   } | null>(null);
+  const rolesRevisionRef = useRef<number | null>(null);
 
   const isAdmin = session?.user?.Rol === "ADMINISTRADOR";
   const permissions = session?.user?.Permisos || [];
@@ -1012,14 +1021,30 @@ export default function App() {
     isAdmin || permissions.includes(permission);
 
   useEffect(() => {
+    let cancelled = false;
+
+    window.api.restoreRemoteSession?.()
+      .then((result) => {
+        if (cancelled || !result?.ok || !result.user) return;
+        setSession({
+          user: result.user,
+          token: result.token,
+          apiUrl: result.apiUrl,
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setCurrentNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   const canView = (view: ViewKey) => {
-    if (view === "trabajo-diario") {
-      return can("trabajo.view_my_mesa") || can("trabajo.view_all_mesas");
-    }
     return can(VIEW_PERMISSIONS[view]);
   };
 
@@ -1046,6 +1071,46 @@ export default function App() {
       setCurrentView(fallback);
     }
   }, [currentView, session]);
+
+  useEffect(() => {
+    if (!session?.apiUrl || !window.api.getRolesRevision) return;
+
+    let cancelled = false;
+    let reloadScheduled = false;
+
+    const checkRolesRevision = async () => {
+      try {
+        const revision = Number(await window.api.getRolesRevision?.());
+        if (cancelled || !Number.isFinite(revision)) return;
+
+        if (rolesRevisionRef.current === null) {
+          rolesRevisionRef.current = revision;
+          return;
+        }
+
+        if (revision !== rolesRevisionRef.current && !reloadScheduled) {
+          reloadScheduled = true;
+          toastWarning(
+            "Permisos actualizados",
+            "Se detecto un cambio en roles y permisos. El sistema se recargara.",
+          );
+          window.setTimeout(() => {
+            window.location.reload();
+          }, 1200);
+        }
+      } catch {
+        // If the server is temporarily unavailable, keep the current session alive.
+      }
+    };
+
+    checkRolesRevision();
+    const interval = window.setInterval(checkRolesRevision, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [session?.apiUrl]);
 
   if (!session) {
     return (
@@ -1098,7 +1163,7 @@ export default function App() {
               <h1 className="text-xl font-black tracking-normal whitespace-nowrap">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
-                <span className="ml-1 text-black">v9.2</span>
+                <span className="ml-1 text-black">v9.4</span>
               </h1>
             </div>
           )}
@@ -1238,22 +1303,27 @@ export default function App() {
             <DiasInhabilesView
               diasInhabiles={diasInhabiles}
               setDiasInhabiles={setDiasInhabiles}
-              canManage={can("dias_inhabiles.manage")}
+              canAdd={can("dias_inhabiles.add")}
+              canImport={can("dias_inhabiles.import")}
+              canEdit={can("dias_inhabiles.edit")}
+              canDelete={can("dias_inhabiles.delete")}
             />
           )}
-          {currentView === "servidor" && <ServerConfig canManage={isAdmin} />}
+          {currentView === "servidor" && <ServerConfig canManage={can("view.servidor")} />}
           {currentView === "usuarios" && (
             <UserManagement
               canCreate={can("users.create")}
               canEdit={can("users.edit")}
-              canAssignMesa={can("mesas.assign_users")}
+              canDelete={can("users.delete")}
+              canAssignMesa={can("users.edit")}
             />
           )}
           {currentView === "roles" && (
             <RolePermissions
               canCreate={can("roles.create")}
               canEdit={can("roles.edit")}
-              canAssignPermissions={can("roles.permissions")}
+              canDelete={can("roles.delete")}
+              canAssignPermissions={can("roles.create") || can("roles.edit")}
             />
           )}
           {currentView === "mesas" && (

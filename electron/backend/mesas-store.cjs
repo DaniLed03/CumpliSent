@@ -639,7 +639,7 @@ function importMesaAssignments(rows) {
 
 function autoAssignMesas(userId, userName) {
   const database = getDb();
-  const activeMesas = database.prepare('SELECT "ID_MESA", "MESA" FROM "MESAS_TRAMITE" WHERE "ACTIVO" = 1').all();
+  const activeMesas = database.prepare('SELECT "ID_MESA", "MESA" FROM "MESAS_TRAMITE" WHERE "ACTIVO" = 1 ORDER BY "ID_MESA" ASC').all();
   if (activeMesas.length === 0) {
     return { ok: false, error: 'No hay mesas de trámite activas para realizar la asignación.' };
   }
@@ -649,7 +649,7 @@ function autoAssignMesas(userId, userName) {
     ("FECHA DE CUMPLIMIENTO" IS NULL OR "FECHA DE CUMPLIMIENTO" = '')
     AND (${sinMateriaColumn} IS NULL OR ${sinMateriaColumn} = '')
   `;
-  const unassignedCondition = `("ID_MESA" IS NULL OR "ID_MESA" = '')`;
+  const unassignedCondition = `("ID_MESA" IS NULL OR TRIM(CAST("ID_MESA" AS TEXT)) = '')`;
   const semaphoreOnCondition = `
     (
       UPPER(TRIM(COALESCE("ESTATUS", ''))) IN ('REQUERIR', 'VENCIDO', 'CERRADO')
@@ -659,16 +659,24 @@ function autoAssignMesas(userId, userName) {
       )
     )
   `;
-  const hasVistaCondition = `("FECHA DE VISTA" IS NOT NULL AND TRIM("FECHA DE VISTA") <> '')`;
+  const hasVistaCondition = `
+    (
+      ("FECHA DE VISTA" IS NOT NULL AND TRIM("FECHA DE VISTA") <> '')
+      OR ("FECHA VISTA CUMPLI" IS NOT NULL AND TRIM("FECHA VISTA CUMPLI") <> '')
+    )
+  `;
+  const numeroOrdenColumn = `"N${String.fromCharCode(218)}MERO DE ORDEN"`;
+  const orderSql = `ORDER BY COALESCE(${numeroOrdenColumn}, rowid) ASC, rowid ASC`;
 
-  // Get current alive load for each active mesa
+  // La carga inicial cuenta solo expedientes vivos asignados a mesas activas.
   const counts = database.prepare(`
     SELECT "ID_MESA", COUNT(*) AS cnt 
     FROM "CUMPLIMIENTOS" 
     WHERE ${aliveCondition}
       AND "ID_MESA" IS NOT NULL
+      AND "ID_MESA" IN (${activeMesas.map(() => '?').join(',')})
     GROUP BY "ID_MESA"
-  `).all();
+  `).all(...activeMesas.map((mesa) => mesa.ID_MESA));
 
   const loadMap = {};
   activeMesas.forEach(m => {
@@ -686,7 +694,7 @@ function autoAssignMesas(userId, userName) {
     WHERE ${aliveCondition}
       AND ${unassignedCondition}
       AND ${semaphoreOnCondition}
-    ORDER BY rowid ASC
+    ${orderSql}
   `).all();
 
   const vistaUnassigned = database.prepare(`
@@ -696,15 +704,26 @@ function autoAssignMesas(userId, userName) {
       AND ${unassignedCondition}
       AND ${hasVistaCondition}
       AND NOT ${semaphoreOnCondition}
-    ORDER BY rowid ASC
+    ${orderSql}
   `).all();
 
-  if (requiringUnassigned.length === 0 && vistaUnassigned.length === 0) {
+  const otherUnassigned = database.prepare(`
+    SELECT rowid, "NÃšMERO DE JUICIO" AS expediente
+    FROM "CUMPLIMIENTOS"
+    WHERE ${aliveCondition}
+      AND ${unassignedCondition}
+      AND NOT ${semaphoreOnCondition}
+      AND NOT ${hasVistaCondition}
+    ${orderSql}
+  `).all();
+
+  if (requiringUnassigned.length === 0 && vistaUnassigned.length === 0 && otherUnassigned.length === 0) {
     return {
       ok: true,
       assignedCount: 0,
       requiringAssignedCount: 0,
       vistaAssignedCount: 0,
+      otherAssignedCount: 0,
       message: 'No hay expedientes activos sin mesa para asignar en los procesos automáticos.'
     };
   }
@@ -721,6 +740,7 @@ function autoAssignMesas(userId, userName) {
   let assignedCount = 0;
   let requiringAssignedCount = 0;
   let vistaAssignedCount = 0;
+  let otherAssignedCount = 0;
 
   const assignBatch = (rows) => {
     let batchAssignedCount = 0;
@@ -756,13 +776,14 @@ function autoAssignMesas(userId, userName) {
   try {
     requiringAssignedCount = assignBatch(requiringUnassigned);
     vistaAssignedCount = assignBatch(vistaUnassigned);
+    otherAssignedCount = assignBatch(otherUnassigned);
     database.exec('COMMIT');
   } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }
 
-  return { ok: true, assignedCount, requiringAssignedCount, vistaAssignedCount };
+  return { ok: true, assignedCount, requiringAssignedCount, vistaAssignedCount, otherAssignedCount };
 }
 
 /* ────────────────────────────────────────────

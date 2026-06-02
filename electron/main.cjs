@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell } = require('electron');
 app.name = 'CumpliSent';
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { registerCumplimientosHandlers } = require('./backend/ipc.cjs');
@@ -54,6 +55,85 @@ function createWindow() {
   });
 }
 
+function productionDatabasePath() {
+  return path.join(app.getPath('userData'), 'backend', 'sistema-control.sqlite');
+}
+
+function removeFileIfExists(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.rmSync(filePath, { force: true });
+    }
+  } catch (error) {
+    console.error(`Error removing database sidecar ${filePath}:`, error);
+  }
+}
+
+function backupFileIfExists(filePath, stamp) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return;
+    }
+
+    fs.renameSync(filePath, `${filePath}.invalid-${stamp}`);
+  } catch (error) {
+    console.error(`Error backing up invalid database file ${filePath}:`, error);
+  }
+}
+
+function validateSqliteFile(filePath) {
+  const { DatabaseSync } = require('node:sqlite');
+  let database;
+
+  try {
+    database = new DatabaseSync(filePath);
+    const row = database.prepare('PRAGMA integrity_check').get();
+    const result = row ? Object.values(row)[0] : null;
+    return result === 'ok';
+  } finally {
+    try {
+      database?.close?.();
+    } catch {}
+  }
+}
+
+function prepareDatabaseFiles() {
+  const dbPath = productionDatabasePath();
+  const dbDir = path.dirname(dbPath);
+  const sidecars = [`${dbPath}-wal`, `${dbPath}-shm`];
+
+  fs.mkdirSync(dbDir, { recursive: true });
+
+  if (!fs.existsSync(dbPath)) {
+    sidecars.forEach(removeFileIfExists);
+    return;
+  }
+
+  try {
+    if (validateSqliteFile(dbPath)) {
+      return;
+    }
+  } catch (error) {
+    console.error('Database validation failed before startup:', error);
+  }
+
+  const hadSidecars = sidecars.some((filePath) => fs.existsSync(filePath));
+  if (hadSidecars) {
+    sidecars.forEach(removeFileIfExists);
+
+    try {
+      if (validateSqliteFile(dbPath)) {
+        return;
+      }
+    } catch (error) {
+      console.error('Database validation failed after sidecar cleanup:', error);
+    }
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  [dbPath, ...sidecars].forEach((filePath) => backupFileIfExists(filePath, stamp));
+}
+
 app.on('second-instance', () => {
   if (!mainWindow) {
     return;
@@ -68,11 +148,7 @@ app.on('second-instance', () => {
 
 function migrateDevDatabase() {
   try {
-    const fs = require('fs');
-    const path = require('path');
-    
-    const prodUserData = app.getPath('userData');
-    const prodDbPath = path.join(prodUserData, 'backend', 'sistema-control.sqlite');
+    const prodDbPath = productionDatabasePath();
     
     if (fs.existsSync(prodDbPath)) {
       console.log('Production database already exists. Skipping migration.');
@@ -107,7 +183,9 @@ function migrateDevDatabase() {
 }
 
 app.whenReady().then(() => {
+  prepareDatabaseFiles();
   migrateDevDatabase();
+  prepareDatabaseFiles();
   registerCumplimientosHandlers();
   registerAuthHandlers();
   registerMesasHandlers();
@@ -116,12 +194,16 @@ app.whenReady().then(() => {
   // Run initial daily work cleanup and schedule periodic runs
   try {
     const { flushTrabajoDiarioToHistory } = require('./backend/mesas-store.cjs');
-    setImmediate(() => {
-      flushTrabajoDiarioToHistory();
-    });
-    setInterval(() => {
-      flushTrabajoDiarioToHistory();
-    }, 60 * 60 * 1000);
+    const safeFlushTrabajoDiarioToHistory = () => {
+      try {
+        flushTrabajoDiarioToHistory();
+      } catch (error) {
+        console.error('Error running daily work flush:', error);
+      }
+    };
+
+    setImmediate(safeFlushTrabajoDiarioToHistory);
+    setInterval(safeFlushTrabajoDiarioToHistory, 60 * 60 * 1000);
   } catch (err) {
     console.error('Error initializing daily work flush schedule:', err);
   }

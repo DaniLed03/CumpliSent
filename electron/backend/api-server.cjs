@@ -11,10 +11,13 @@ const {
   listRoles,
   listRolesWithPermissions,
   listUsers,
+  getRolesRevision,
+  getSessionUserById,
   normalizeRoleName,
   updateRole,
   deleteRole,
   updateUser,
+  deleteUser,
   verifyRememberSession,
 } = require('./auth-store.cjs');
 const {
@@ -71,12 +74,45 @@ function verifyToken(token) {
 
 let serverInstance = null;
 let serverPort = null;
+const ONLINE_WINDOW_MS = 15000;
+const activeConnections = new Map();
 
 function getServerStatus() {
   return {
     running: serverInstance !== null,
     port: serverPort,
   };
+}
+
+function touchUserConnection(user, request) {
+  if (!user?.IdUsuario) return;
+  activeConnections.set(Number(user.IdUsuario), {
+    IdUsuario: Number(user.IdUsuario),
+    lastSeen: new Date().toISOString(),
+    remoteAddress: request?.ip || request?.socket?.remoteAddress || '',
+    userAgent: String(request?.headers?.['user-agent'] || ''),
+  });
+}
+
+function listServerClients() {
+  const now = Date.now();
+  return listUsers()
+    .map((user) => {
+      const connection = activeConnections.get(Number(user.IdUsuario));
+      const lastSeenMs = connection?.lastSeen ? new Date(connection.lastSeen).getTime() : 0;
+      const connected = Boolean(lastSeenMs && now - lastSeenMs <= ONLINE_WINDOW_MS);
+      return {
+        ...user,
+        Conectado: connected,
+        UltimaActividad: connection?.lastSeen || '',
+        Direccion: connection?.remoteAddress || '',
+        Cliente: connection?.userAgent || '',
+      };
+    })
+    .sort((a, b) => {
+      if (a.Conectado !== b.Conectado) return a.Conectado ? -1 : 1;
+      return String(a.NombreCompleto || a.Usuario).localeCompare(String(b.NombreCompleto || b.Usuario), 'es-MX');
+    });
 }
 
 /* ────────────────────────────────────────────
@@ -104,6 +140,7 @@ function buildApp() {
     }
 
     request.user = decoded;
+    touchUserConnection(decoded, request);
   });
 
   app.decorate('requireAdmin', async (request, reply) => {
@@ -143,6 +180,7 @@ function buildApp() {
     }
 
     const token = signToken(result.user);
+    touchUserConnection(result.user, request);
     return {
       ok: true,
       token,
@@ -164,6 +202,7 @@ function buildApp() {
     }
 
     const token = signToken(result.user);
+    touchUserConnection(result.user, request);
     return { ok: true, token, user: result.user };
   });
 
@@ -171,7 +210,11 @@ function buildApp() {
   app.get('/api/verify', {
     preHandler: [app.authenticate],
   }, async (request) => {
-    return { ok: true, user: request.user };
+    const freshUser = getSessionUserById(request.user?.IdUsuario);
+    if (!freshUser) {
+      return { ok: false, error: 'Sesion no valida' };
+    }
+    return { ok: true, token: signToken(freshUser), user: freshUser };
   });
 
   /* ── List users ── */
@@ -179,6 +222,12 @@ function buildApp() {
     preHandler: [app.authenticate],
   }, async () => {
     return { ok: true, usuarios: listUsers() };
+  });
+
+  app.get('/api/server/clients', {
+    preHandler: [app.authenticate, app.requirePermission('view.servidor')],
+  }, async () => {
+    return { ok: true, clients: listServerClients() };
   });
 
   /* ── Create user ── */
@@ -216,6 +265,22 @@ function buildApp() {
   });
 
   /* ── List roles ── */
+  app.delete('/api/usuarios/:id', {
+    preHandler: [app.authenticate, app.requirePermission('users.delete')],
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!id) {
+      return reply.code(400).send({ error: 'ID de usuario invalido' });
+    }
+
+    const result = deleteUser(id);
+    if (!result.ok) {
+      return reply.code(400).send({ error: result.error });
+    }
+
+    return result;
+  });
+
   app.get('/api/roles', {
     preHandler: [app.authenticate],
   }, async () => {
@@ -223,15 +288,21 @@ function buildApp() {
   });
 
   app.get('/api/permissions', {
-    preHandler: [app.authenticate, app.requirePermission('roles.permissions')],
+    preHandler: [app.authenticate, app.requirePermission('view.roles')],
   }, async () => {
     return { ok: true, permissions: listPermissions() };
   });
 
   app.get('/api/roles-with-permissions', {
-    preHandler: [app.authenticate, app.requirePermission('roles.permissions')],
+    preHandler: [app.authenticate, app.requirePermission('view.roles')],
   }, async () => {
     return { ok: true, roles: listRolesWithPermissions() };
+  });
+
+  app.get('/api/roles-revision', {
+    preHandler: [app.authenticate],
+  }, async () => {
+    return { ok: true, revision: getRolesRevision() };
   });
 
   app.post('/api/roles', {
@@ -259,7 +330,7 @@ function buildApp() {
   });
 
   app.delete('/api/roles/:id', {
-    preHandler: [app.authenticate, app.requirePermission('roles.edit')],
+    preHandler: [app.authenticate, app.requirePermission('roles.delete')],
   }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!id) {
@@ -326,7 +397,7 @@ function buildApp() {
 
   // Mesas de trámite
   app.get('/api/mesas', {
-    preHandler: [app.authenticate, app.requirePermission('mesas.view')],
+    preHandler: [app.authenticate, app.requirePermission('view.mesas')],
   }, async () => {
     return { ok: true, mesas: listMesas() };
   });
@@ -338,19 +409,19 @@ function buildApp() {
   });
 
   app.post('/api/mesas', {
-    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+    preHandler: [app.authenticate, app.requirePermission('mesas.create')],
   }, async (request) => {
     return createMesa(request.body || {});
   });
 
   app.put('/api/mesas/:id', {
-    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+    preHandler: [app.authenticate, app.requirePermission('mesas.edit')],
   }, async (request) => {
     return updateMesa(Number(request.params.id), request.body || {});
   });
 
   app.delete('/api/mesas/:id', {
-    preHandler: [app.authenticate, app.requirePermission('mesas.manage')],
+    preHandler: [app.authenticate, app.requirePermission('mesas.delete')],
   }, async (request) => {
     return deleteMesa(Number(request.params.id));
   });
@@ -394,13 +465,13 @@ function buildApp() {
   });
 
   app.get('/api/trabajo/expedientes-mesa/:mesaId', {
-    preHandler: [app.authenticate, app.requirePermission('trabajo.view_my_mesa')],
+    preHandler: [app.authenticate, app.requirePermission('view.trabajo_diario')],
   }, async (request) => {
     return { ok: true, rows: getExpedientesByMesa(request.params.mesaId) };
   });
 
   app.get('/api/trabajo/expedientes-all', {
-    preHandler: [app.authenticate, app.requirePermission('trabajo.view_all_mesas')],
+    preHandler: [app.authenticate, app.requirePermission('view.trabajo_diario')],
   }, async () => {
     return { ok: true, rows: getExpedientesAllMesas() };
   });
@@ -516,6 +587,7 @@ function getNetworkUrls(port) {
 
 module.exports = {
   getNetworkUrls,
+  listServerClients,
   getServerStatus,
   scanPorts,
   startServer,

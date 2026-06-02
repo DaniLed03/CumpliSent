@@ -45,40 +45,47 @@ const DEFAULT_ROLES = [
 
 const SYSTEM_PERMISSIONS = [
   { IdPermiso: 'view.cumplimientos', NombrePermiso: 'Cumplimientos', Categoria: 'VISTAS' },
-  { IdPermiso: 'view.procesar', NombrePermiso: 'Procesar Excel', Categoria: 'VISTAS' },
+  { IdPermiso: 'view.procesar', NombrePermiso: 'Normalizacion de la Informacion', Categoria: 'VISTAS' },
   { IdPermiso: 'view.dias_inhabiles', NombrePermiso: 'Dias inhabiles', Categoria: 'VISTAS' },
   { IdPermiso: 'view.servidor', NombrePermiso: 'Servidor', Categoria: 'VISTAS' },
   { IdPermiso: 'view.usuarios', NombrePermiso: 'Usuarios', Categoria: 'VISTAS' },
   { IdPermiso: 'view.roles', NombrePermiso: 'Roles y permisos', Categoria: 'VISTAS' },
-  { IdPermiso: 'users.create', NombrePermiso: 'Crear', Categoria: 'USUARIOS' },
-  { IdPermiso: 'users.edit', NombrePermiso: 'Editar', Categoria: 'USUARIOS' },
-  { IdPermiso: 'roles.create', NombrePermiso: 'Crear rol', Categoria: 'ROLES Y PERMISOS' },
-  { IdPermiso: 'roles.edit', NombrePermiso: 'Editar rol', Categoria: 'ROLES Y PERMISOS' },
-  { IdPermiso: 'roles.permissions', NombrePermiso: 'Permisos', Categoria: 'ROLES Y PERMISOS' },
-  { IdPermiso: 'server.manage', NombrePermiso: 'Administrar', Categoria: 'SERVIDOR' },
-  { IdPermiso: 'cumplimientos.add', NombrePermiso: 'Agregar', Categoria: 'CUMPLIMIENTOS' },
-  { IdPermiso: 'cumplimientos.edit', NombrePermiso: 'Editar', Categoria: 'CUMPLIMIENTOS' },
-  { IdPermiso: 'cumplimientos.import', NombrePermiso: 'Importar', Categoria: 'CUMPLIMIENTOS' },
-  { IdPermiso: 'cumplimientos.export', NombrePermiso: 'Exportar', Categoria: 'CUMPLIMIENTOS' },
-  { IdPermiso: 'cumplimientos.recalculate', NombrePermiso: 'Recalcular', Categoria: 'CUMPLIMIENTOS' },
-  { IdPermiso: 'dias_inhabiles.manage', NombrePermiso: 'Administrar', Categoria: 'DIAS INHABILES' },
-  
-  // Mesas de trámite
-  { IdPermiso: 'mesas.view', NombrePermiso: 'Ver mesas', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.manage', NombrePermiso: 'Administrar', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.import', NombrePermiso: 'Importar', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.auto_assign', NombrePermiso: 'Autoasignar', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.reassign', NombrePermiso: 'Reasignar', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.history', NombrePermiso: 'Historial', Categoria: 'MESAS DE TRÁMITE' },
-  { IdPermiso: 'mesas.assign_users', NombrePermiso: 'Asignar usuarios', Categoria: 'MESAS DE TRÁMITE' },
+  { IdPermiso: 'view.mesas', NombrePermiso: 'Mesas de tramite', Categoria: 'VISTAS' },
+  { IdPermiso: 'view.trabajo_diario', NombrePermiso: 'Trabajo diario', Categoria: 'VISTAS' },
 
-  // Trabajo diario
-  { IdPermiso: 'trabajo.view_my_mesa', NombrePermiso: 'Mi mesa', Categoria: 'TRABAJO DIARIO' },
-  { IdPermiso: 'trabajo.view_all_mesas', NombrePermiso: 'Todas las mesas', Categoria: 'TRABAJO DIARIO' },
+  { IdPermiso: 'cumplimientos.details', NombrePermiso: 'Ver detalles', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.delete', NombrePermiso: 'Borrar', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.edit', NombrePermiso: 'Editar', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.export', NombrePermiso: 'Exportar Excel', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.import', NombrePermiso: 'Importar Excel', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.add', NombrePermiso: 'Agregar nuevos expedientes por rango', Categoria: 'CUMPLIMIENTOS' },
+  { IdPermiso: 'cumplimientos.update_from_sentencias', NombrePermiso: 'Actualizar desde sentencias', Categoria: 'CUMPLIMIENTOS' },
+
+  { IdPermiso: 'dias_inhabiles.add', NombrePermiso: 'Agregar', Categoria: 'DIAS INHABILES' },
+  { IdPermiso: 'dias_inhabiles.import', NombrePermiso: 'Importar', Categoria: 'DIAS INHABILES' },
+  { IdPermiso: 'dias_inhabiles.edit', NombrePermiso: 'Editar', Categoria: 'DIAS INHABILES' },
+  { IdPermiso: 'dias_inhabiles.delete', NombrePermiso: 'Borrar', Categoria: 'DIAS INHABILES' },
+
+  { IdPermiso: 'mesas.create', NombrePermiso: 'Agregar', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.edit', NombrePermiso: 'Editar', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.delete', NombrePermiso: 'Borrar', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.import', NombrePermiso: 'Importar Excel', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.auto_assign', NombrePermiso: 'Ejecutar asignacion automatica', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.reassign', NombrePermiso: 'Reasignar', Categoria: 'MESAS DE TRAMITE' },
+  { IdPermiso: 'mesas.history', NombrePermiso: 'Mostrar Historial', Categoria: 'MESAS DE TRAMITE' },
+
   { IdPermiso: 'trabajo.capture', NombrePermiso: 'Capturar', Categoria: 'TRABAJO DIARIO' },
-  { IdPermiso: 'trabajo.edit_today', NombrePermiso: 'Editar dia', Categoria: 'TRABAJO DIARIO' },
-  { IdPermiso: 'trabajo.history', NombrePermiso: 'Historial', Categoria: 'TRABAJO DIARIO' },
-  { IdPermiso: 'trabajo.flush_history', NombrePermiso: 'Enviar historial', Categoria: 'TRABAJO DIARIO' },
+  { IdPermiso: 'trabajo.edit_today', NombrePermiso: 'Editar', Categoria: 'TRABAJO DIARIO' },
+  { IdPermiso: 'trabajo.flush_history', NombrePermiso: 'Enviar a Historial', Categoria: 'TRABAJO DIARIO' },
+  { IdPermiso: 'trabajo.history', NombrePermiso: 'Mostrar Historial', Categoria: 'TRABAJO DIARIO' },
+
+  { IdPermiso: 'users.create', NombrePermiso: 'Agregar', Categoria: 'USUARIOS' },
+  { IdPermiso: 'users.edit', NombrePermiso: 'Editar', Categoria: 'USUARIOS' },
+  { IdPermiso: 'users.delete', NombrePermiso: 'Borrar', Categoria: 'USUARIOS' },
+
+  { IdPermiso: 'roles.create', NombrePermiso: 'Agregar', Categoria: 'ROLES Y PERMISOS' },
+  { IdPermiso: 'roles.edit', NombrePermiso: 'Editar', Categoria: 'ROLES Y PERMISOS' },
+  { IdPermiso: 'roles.delete', NombrePermiso: 'Borrar', Categoria: 'ROLES Y PERMISOS' },
 ];
 
 const DEFAULT_ROLE_PERMISSIONS = {
@@ -87,34 +94,40 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'view.cumplimientos',
     'view.procesar',
     'view.dias_inhabiles',
+    'cumplimientos.details',
     'cumplimientos.add',
     'cumplimientos.edit',
     'cumplimientos.import',
     'cumplimientos.export',
-    'cumplimientos.recalculate',
-    'dias_inhabiles.manage',
-    'mesas.view',
-    'trabajo.view_all_mesas',
+    'cumplimientos.update_from_sentencias',
+    'dias_inhabiles.add',
+    'dias_inhabiles.import',
+    'dias_inhabiles.edit',
+    'dias_inhabiles.delete',
+    'view.mesas',
+    'view.trabajo_diario',
     'trabajo.history',
   ],
   3: [
     'view.cumplimientos',
     'view.procesar',
+    'cumplimientos.details',
     'cumplimientos.add',
     'cumplimientos.edit',
     'cumplimientos.import',
     'cumplimientos.export',
-    'cumplimientos.recalculate',
-    'mesas.view',
-    'trabajo.view_all_mesas',
+    'cumplimientos.update_from_sentencias',
+    'view.mesas',
+    'view.trabajo_diario',
     'trabajo.history',
   ],
   4: [
     'view.cumplimientos',
+    'cumplimientos.details',
     'cumplimientos.edit',
     'cumplimientos.export',
-    'mesas.view',
-    'trabajo.view_my_mesa',
+    'view.mesas',
+    'view.trabajo_diario',
     'trabajo.capture',
     'trabajo.edit_today',
     'trabajo.history',
@@ -174,6 +187,16 @@ function initializeAuthTables() {
     )
   `);
 
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS "AUTH_META" (
+      "Clave" TEXT PRIMARY KEY,
+      "Valor" TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  database.prepare(`
+    INSERT OR IGNORE INTO "AUTH_META" ("Clave", "Valor") VALUES ('roles_revision', '1')
+  `).run();
+
   ensureUserColumn(database, 'RecordarSesion', 'TEXT DEFAULT \'N\'');
   ensureUserColumn(database, 'RememberTokenHash', 'TEXT DEFAULT \'\'');
   ensureUserColumn(database, 'RememberTokenExpires', 'TEXT DEFAULT \'\'');
@@ -205,7 +228,35 @@ function initializeAuthTables() {
 }
 
 function seedPermissions(database) {
-  const legacyMesasPermissions = [
+  const legacyPermissionMappings = [
+    ['cumplimientos.recalculate', 'cumplimientos.update_from_sentencias'],
+    ['cumplimientos.edit', 'cumplimientos.delete'],
+    ['cumplimientos.edit', 'cumplimientos.details'],
+    ['dias_inhabiles.manage', 'dias_inhabiles.add'],
+    ['dias_inhabiles.manage', 'dias_inhabiles.import'],
+    ['dias_inhabiles.manage', 'dias_inhabiles.edit'],
+    ['dias_inhabiles.manage', 'dias_inhabiles.delete'],
+    ['mesas.view', 'view.mesas'],
+    ['mesas.manage', 'mesas.create'],
+    ['mesas.manage', 'mesas.edit'],
+    ['mesas.manage', 'mesas.delete'],
+    ['mesas.assign_users', 'users.edit'],
+    ['trabajo.view_my_mesa', 'view.trabajo_diario'],
+    ['trabajo.view_all_mesas', 'view.trabajo_diario'],
+    ['users.edit', 'users.delete'],
+    ['roles.edit', 'roles.delete'],
+    ['roles.permissions', 'roles.edit'],
+  ];
+  const legacyPermissions = [
+    'cumplimientos.recalculate',
+    'dias_inhabiles.manage',
+    'mesas.view',
+    'mesas.manage',
+    'mesas.assign_users',
+    'trabajo.view_my_mesa',
+    'trabajo.view_all_mesas',
+    'roles.permissions',
+    'server.manage',
     'mesas.assignment_history',
     'mesas.import_assignment',
     'mesas.import_assignments',
@@ -215,11 +266,6 @@ function seedPermissions(database) {
     'trabajo.view_own_mesa',
     'view.dashboard',
   ];
-
-  for (const permissionId of legacyMesasPermissions) {
-    database.prepare('DELETE FROM "ROL_PERMISOS" WHERE "IdPermiso" = ?').run(permissionId);
-    database.prepare('DELETE FROM "CAT_PERMISOS" WHERE "IdPermiso" = ?').run(permissionId);
-  }
 
   const insertPermission = database.prepare(`
     INSERT OR IGNORE INTO "CAT_PERMISOS" ("IdPermiso", "NombrePermiso", "Categoria")
@@ -236,6 +282,20 @@ function seedPermissions(database) {
     updatePermission.run(permission.NombrePermiso, permission.Categoria, permission.IdPermiso);
   }
 
+  for (const [legacyPermission, newPermission] of legacyPermissionMappings) {
+    database.prepare(`
+      INSERT OR IGNORE INTO "ROL_PERMISOS" ("IdRol", "IdPermiso")
+      SELECT DISTINCT "IdRol", ?
+      FROM "ROL_PERMISOS"
+      WHERE "IdPermiso" = ?
+    `).run(newPermission, legacyPermission);
+  }
+
+  for (const permissionId of legacyPermissions) {
+    database.prepare('DELETE FROM "ROL_PERMISOS" WHERE "IdPermiso" = ?').run(permissionId);
+    database.prepare('DELETE FROM "CAT_PERMISOS" WHERE "IdPermiso" = ?').run(permissionId);
+  }
+
   const insertRolePermission = database.prepare(`
     INSERT OR IGNORE INTO "ROL_PERMISOS" ("IdRol", "IdPermiso") VALUES (?, ?)
   `);
@@ -245,6 +305,7 @@ function seedPermissions(database) {
       insertRolePermission.run(Number(roleId), permissionId);
     }
   }
+
 }
 
 function ensureUserColumn(database, columnName, definition) {
@@ -564,51 +625,96 @@ function listPermissions() {
         WHEN 'VISTAS' THEN 1
         WHEN 'CUMPLIMIENTOS' THEN 2
         WHEN 'DIAS INHABILES' THEN 3
-        WHEN 'MESAS DE TRÁMITE' THEN 4
+        WHEN 'MESAS DE TRAMITE' THEN 4
         WHEN 'TRABAJO DIARIO' THEN 5
-        WHEN 'ADMINISTRACION' THEN 6
-        WHEN 'SERVIDOR' THEN 7
-        WHEN 'USUARIOS' THEN 8
-        WHEN 'ROLES Y PERMISOS' THEN 9
+        WHEN 'USUARIOS' THEN 6
+        WHEN 'ROLES Y PERMISOS' THEN 7
         ELSE 99
       END,
       CASE "IdPermiso"
-        WHEN 'view.cumplimientos' THEN 2
-        WHEN 'view.procesar' THEN 3
-        WHEN 'view.dias_inhabiles' THEN 4
-        WHEN 'view.servidor' THEN 5
-        WHEN 'view.usuarios' THEN 6
-        WHEN 'view.roles' THEN 7
-        WHEN 'cumplimientos.add' THEN 10
-        WHEN 'cumplimientos.edit' THEN 11
-        WHEN 'cumplimientos.import' THEN 12
+        WHEN 'view.cumplimientos' THEN 1
+        WHEN 'view.procesar' THEN 2
+        WHEN 'view.dias_inhabiles' THEN 3
+        WHEN 'view.servidor' THEN 4
+        WHEN 'view.usuarios' THEN 5
+        WHEN 'view.roles' THEN 6
+        WHEN 'view.mesas' THEN 7
+        WHEN 'view.trabajo_diario' THEN 8
+        WHEN 'cumplimientos.details' THEN 10
+        WHEN 'cumplimientos.delete' THEN 11
+        WHEN 'cumplimientos.edit' THEN 12
         WHEN 'cumplimientos.export' THEN 13
-        WHEN 'cumplimientos.recalculate' THEN 14
-        WHEN 'mesas.view' THEN 30
-        WHEN 'mesas.manage' THEN 31
-        WHEN 'mesas.assign_users' THEN 32
-        WHEN 'mesas.auto_assign' THEN 33
-        WHEN 'mesas.import' THEN 34
+        WHEN 'cumplimientos.import' THEN 14
+        WHEN 'cumplimientos.add' THEN 15
+        WHEN 'cumplimientos.update_from_sentencias' THEN 16
+        WHEN 'dias_inhabiles.add' THEN 20
+        WHEN 'dias_inhabiles.import' THEN 21
+        WHEN 'dias_inhabiles.edit' THEN 22
+        WHEN 'dias_inhabiles.delete' THEN 23
+        WHEN 'mesas.create' THEN 30
+        WHEN 'mesas.edit' THEN 31
+        WHEN 'mesas.delete' THEN 32
+        WHEN 'mesas.import' THEN 33
+        WHEN 'mesas.auto_assign' THEN 34
         WHEN 'mesas.reassign' THEN 35
         WHEN 'mesas.history' THEN 36
         WHEN 'trabajo.capture' THEN 40
         WHEN 'trabajo.edit_today' THEN 41
         WHEN 'trabajo.flush_history' THEN 42
-        WHEN 'trabajo.view_my_mesa' THEN 43
-        WHEN 'trabajo.view_all_mesas' THEN 44
-        WHEN 'trabajo.history' THEN 45
-        WHEN 'server.manage' THEN 60
+        WHEN 'trabajo.history' THEN 43
         WHEN 'users.create' THEN 70
         WHEN 'users.edit' THEN 71
+        WHEN 'users.delete' THEN 72
         WHEN 'roles.create' THEN 80
         WHEN 'roles.edit' THEN 81
-        WHEN 'roles.permissions' THEN 82
+        WHEN 'roles.delete' THEN 82
         ELSE 999
       END,
       "NombrePermiso" ASC
   `).all();
 }
 
+function getSessionUserById(IdUsuario) {
+  const row = getDb().prepare(`
+    SELECT u."IdUsuario", u."Usuario", u."IdRol", u."Activo",
+           u."NombreCompleto", r."NombreRol", u."ID_MESA"
+    FROM "USUARIOS" u
+    JOIN "CAT_ROLES" r ON u."IdRol" = r."IdRol"
+    WHERE u."IdUsuario" = ?
+    LIMIT 1
+  `).get(IdUsuario);
+
+  if (!row || row.Activo !== 'S') {
+    return null;
+  }
+
+  return {
+    IdUsuario: row.IdUsuario,
+    Usuario: row.Usuario,
+    NombreCompleto: row.NombreCompleto || row.Usuario,
+    IdRol: row.IdRol,
+    Rol: normalizeRoleName(row.NombreRol),
+    Permisos: getPermissionsForRole(row.IdRol),
+    IdMesa: row.ID_MESA,
+  };
+}
+
+function getRolesRevision() {
+  const row = getDb()
+    .prepare('SELECT "Valor" FROM "AUTH_META" WHERE "Clave" = ?')
+    .get('roles_revision');
+  const revision = Number(row?.Valor || 1);
+  return Number.isFinite(revision) && revision > 0 ? revision : 1;
+}
+
+function bumpRolesRevision() {
+  const nextRevision = getRolesRevision() + 1;
+  getDb().prepare(`
+    INSERT INTO "AUTH_META" ("Clave", "Valor") VALUES ('roles_revision', ?)
+    ON CONFLICT("Clave") DO UPDATE SET "Valor" = excluded."Valor"
+  `).run(String(nextRevision));
+  return nextRevision;
+}
 function getPermissionsForRole(IdRol) {
   return getDb().prepare(`
     SELECT "IdPermiso"
@@ -642,6 +748,7 @@ function createRole({ NombreRol, Permisos = [] }) {
   const result = database.prepare('INSERT INTO "CAT_ROLES" ("NombreRol") VALUES (?)').run(normalizedName);
   const IdRol = Number(result.lastInsertRowid);
   setRolePermissions(IdRol, Permisos);
+  bumpRolesRevision();
   return { ok: true, IdRol };
 }
 
@@ -670,6 +777,8 @@ function updateRole(IdRol, { NombreRol, Permisos }) {
     setRolePermissions(IdRol, Permisos);
   }
 
+  bumpRolesRevision();
+
   return { ok: true };
 }
 
@@ -696,6 +805,7 @@ function deleteRole(IdRol) {
   }
   database.prepare('DELETE FROM "ROL_PERMISOS" WHERE "IdRol" = ?').run(IdRol);
   database.prepare('DELETE FROM "CAT_ROLES" WHERE "IdRol" = ?').run(IdRol);
+  bumpRolesRevision();
   return { ok: true };
 }
 
@@ -710,6 +820,8 @@ module.exports = {
   createUser,
   clearRememberSession,
   getPermissionsForRole,
+  getRolesRevision,
+  getSessionUserById,
   hashPassword,
   initializeAuthTables,
   isAdmin,
@@ -725,3 +837,5 @@ module.exports = {
   verifyRememberSession,
   verifyPassword,
 };
+
+

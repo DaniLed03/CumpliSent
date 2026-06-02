@@ -143,7 +143,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
   }, [historySearch]);
 
   useEffect(() => {
-    if (can('mesas.view')) {
+    if (can('view.mesas')) {
       loadMesas();
     }
   }, [loadMesas, can]);
@@ -189,6 +189,8 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
   // Handle submit mesa
   async function handleMesaSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (editingMesa && !can('mesas.edit')) return;
+    if (!editingMesa && !can('mesas.create')) return;
     if (!formMesa.trim()) {
       setModalError('La clave o nombre de la mesa es obligatoria.');
       return;
@@ -220,7 +222,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
 
   // Toggle mesa active status directly from row
   async function handleToggleActivo(mesa: MesaRecord) {
-    if (!can('mesas.manage')) return;
+    if (!can('mesas.edit')) return;
     try {
       await window.api.updateMesa(mesa.ID_MESA, {
         mesa: mesa.MESA,
@@ -235,7 +237,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
   }
 
   function handleDeleteMesa(mesa: MesaRecord) {
-    if (!can('mesas.manage')) return;
+    if (!can('mesas.delete')) return;
     setDeletingMesa(mesa);
 
   }
@@ -274,7 +276,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
       if (res.ok) {
         toastSuccess(
           'Asignación completada',
-          `Se asignaron ${res.assignedCount} expediente(s): ${res.requiringAssignedCount || 0} en requerimiento y ${res.vistaAssignedCount || 0} con fecha de vista.`
+          `Se asignaron ${res.assignedCount} expediente(s): ${res.requiringAssignedCount || 0} en requerimiento, ${res.vistaAssignedCount || 0} con fecha de vista y ${res.otherAssignedCount || 0} restantes.`
         );
         await loadExpedientes();
       } else {
@@ -447,7 +449,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
   const historyFrom = historyTotal === 0 ? 0 : historyPage * historyPageSize + 1;
   const historyTo = Math.min((historyPage + 1) * historyPageSize, historyTotal);
 
-  if (!can('mesas.view')) {
+  if (!can('view.mesas')) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center bg-card border border-border rounded-xl">
         <AlertCircle className="w-12 h-12 text-red-500 mb-3" />
@@ -589,7 +591,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                     Reasignar
                   </button>
                 )}
-                {can('mesas.manage') && (
+                {can('mesas.create') && (
                   <button
                     onClick={openCreate}
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -644,7 +646,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px] w-72">Mesa</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[10px]">Encargado / Nombre</th>
                       <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px] w-[36rem]">Estado</th>
-                      {can('mesas.manage') && <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px] w-32">Acciones</th>}
+                      {(can('mesas.edit') || can('mesas.delete')) && <th className="px-4 py-3 text-center font-semibold uppercase tracking-wider text-[10px] w-32">Acciones</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -656,7 +658,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                         <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => handleToggleActivo(mesa)}
-                            disabled={!can('mesas.manage')}
+                            disabled={!can('mesas.edit')}
                             className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold border transition-colors ${
                               mesa.ACTIVO === 1
                                 ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
@@ -676,23 +678,23 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                             )}
                           </button>
                         </td>
-                        {can('mesas.manage') && (
+                        {(can('mesas.edit') || can('mesas.delete')) && (
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <button
+                              {can('mesas.edit') && <button
                                 onClick={() => openEdit(mesa)}
                                 className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-md transition-colors inline-flex"
                                 title="Editar Mesa"
                               >
                                 <Edit className="w-4 h-4" />
-                              </button>
-                              <button
+                              </button>}
+                              {can('mesas.delete') && <button
                                 onClick={() => handleDeleteMesa(mesa)}
                                 className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors inline-flex"
                                 title="Eliminar Mesa"
                               >
                                 <Trash2 className="w-4 h-4" />
-                              </button>
+                              </button>}
                             </div>
                           </td>
                         )}

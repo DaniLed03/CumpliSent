@@ -16,10 +16,12 @@ import { NuevoRolModal } from './modals/SystemModals';
 export default function RolePermissions({
   canCreate = true,
   canEdit = true,
+  canDelete = true,
   canAssignPermissions = true,
 }: {
   canCreate?: boolean;
   canEdit?: boolean;
+  canDelete?: boolean;
   canAssignPermissions?: boolean;
 }) {
   const [roles, setRoles] = useState<RoleWithPermissionsRecord[]>([]);
@@ -207,22 +209,22 @@ export default function RolePermissions({
                     {role.Permisos.length} permiso(s)
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {canEdit && (
+                    {(canEdit || canDelete) && (
                       <div className="flex items-center justify-center gap-2">
-                        <button
+                        {canEdit && <button
                           onClick={() => openEdit(role)}
                           className="p-1.5 hover:bg-accent rounded-md transition-colors"
                           title="Editar rol"
                         >
                           <Edit className="w-4 h-4" />
-                        </button>
-                        <button
+                        </button>}
+                        {canDelete && <button
                           onClick={() => handleDeleteRole(role)}
                           className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors inline-flex"
                           title="Eliminar rol"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </button>}
                       </div>
                     )}
                   </td>

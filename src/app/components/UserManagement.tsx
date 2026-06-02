@@ -31,10 +31,12 @@ import { EditarUsuarioModal, NuevoUsuarioModal } from './modals/SystemModals';
 export default function UserManagement({
   canCreate = true,
   canEdit = true,
+  canDelete = true,
   canAssignMesa = false,
 }: {
   canCreate?: boolean;
   canEdit?: boolean;
+  canDelete?: boolean;
   canAssignMesa?: boolean;
 }) {
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -423,22 +425,22 @@ export default function UserManagement({
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{user.FechaCreacion || '—'}</td>
                   <td className="px-4 py-3 text-center">
-                    {canEdit && (
+                    {(canEdit || canDelete) && (
                       <div className="flex items-center justify-center gap-2">
-                        <button
+                        {canEdit && <button
                           onClick={() => openEdit(user)}
                           className="p-1.5 hover:bg-accent rounded-md transition-colors"
                           title="Editar usuario"
                         >
                           <Edit className="w-4 h-4" />
-                        </button>
-                        <button
+                        </button>}
+                        {canDelete && <button
                           onClick={() => setUserToDelete(user)}
                           className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
                           title="Eliminar usuario"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
+                        </button>}
                       </div>
                     )}
                   </td>
