@@ -74,8 +74,10 @@ function verifyToken(token) {
 
 let serverInstance = null;
 let serverPort = null;
-const ONLINE_WINDOW_MS = 15000;
+const ONLINE_WINDOW_MS = 60000;
+const ROLE_REVISION_WAIT_TIMEOUT_MS = 25000;
 const activeConnections = new Map();
+const rolesRevisionWaiters = new Set();
 
 function getServerStatus() {
   return {
@@ -113,6 +115,33 @@ function listServerClients() {
       if (a.Conectado !== b.Conectado) return a.Conectado ? -1 : 1;
       return String(a.NombreCompleto || a.Usuario).localeCompare(String(b.NombreCompleto || b.Usuario), 'es-MX');
     });
+}
+
+function notifyRolesRevisionWaiters(revision = getRolesRevision()) {
+  for (const waiter of rolesRevisionWaiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve(revision);
+  }
+  rolesRevisionWaiters.clear();
+}
+
+function waitForRolesRevision(sinceRevision, timeoutMs = ROLE_REVISION_WAIT_TIMEOUT_MS) {
+  const currentRevision = getRolesRevision();
+  if (!Number.isFinite(sinceRevision) || currentRevision !== sinceRevision) {
+    return Promise.resolve(currentRevision);
+  }
+
+  return new Promise((resolve) => {
+    const waiter = {
+      resolve: (revision) => {
+        rolesRevisionWaiters.delete(waiter);
+        resolve(revision);
+      },
+      timer: null,
+    };
+    waiter.timer = setTimeout(() => waiter.resolve(getRolesRevision()), timeoutMs);
+    rolesRevisionWaiters.add(waiter);
+  });
 }
 
 /* ────────────────────────────────────────────
@@ -261,6 +290,7 @@ function buildApp() {
       return reply.code(400).send({ error: result.error });
     }
 
+    notifyRolesRevisionWaiters();
     return { ok: true };
   });
 
@@ -278,6 +308,7 @@ function buildApp() {
       return reply.code(400).send({ error: result.error });
     }
 
+    notifyRolesRevisionWaiters();
     return result;
   });
 
@@ -305,6 +336,18 @@ function buildApp() {
     return { ok: true, revision: getRolesRevision() };
   });
 
+  app.get('/api/roles-revision/wait', {
+    preHandler: [app.authenticate],
+  }, async (request) => {
+    const since = Number(request.query?.since);
+    const requestedTimeout = Number(request.query?.timeout);
+    const timeout = Number.isFinite(requestedTimeout)
+      ? Math.max(5000, Math.min(30000, requestedTimeout))
+      : ROLE_REVISION_WAIT_TIMEOUT_MS;
+    const revision = await waitForRolesRevision(since, timeout);
+    return { ok: true, revision };
+  });
+
   app.post('/api/roles', {
     preHandler: [app.authenticate, app.requirePermission('roles.create')],
   }, async (request, reply) => {
@@ -312,6 +355,7 @@ function buildApp() {
     if (!result.ok) {
       return reply.code(400).send({ error: result.error });
     }
+    notifyRolesRevisionWaiters();
     return result;
   });
 
@@ -326,6 +370,7 @@ function buildApp() {
     if (!result.ok) {
       return reply.code(400).send({ error: result.error });
     }
+    notifyRolesRevisionWaiters();
     return result;
   });
 
@@ -340,6 +385,7 @@ function buildApp() {
     if (!result.ok) {
       return reply.code(400).send({ error: result.error });
     }
+    notifyRolesRevisionWaiters();
     return result;
   });
 

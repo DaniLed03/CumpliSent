@@ -708,7 +708,7 @@ function autoAssignMesas(userId, userName) {
   `).all();
 
   const otherUnassigned = database.prepare(`
-    SELECT rowid, "NÃšMERO DE JUICIO" AS expediente
+    SELECT rowid, "NÚMERO DE JUICIO" AS expediente
     FROM "CUMPLIMIENTOS"
     WHERE ${aliveCondition}
       AND ${unassignedCondition}

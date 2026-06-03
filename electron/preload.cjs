@@ -287,6 +287,9 @@ contextBridge.exposeInMainWorld('api', {
   getRolesRevision: async () => remoteSession
     ? (await remoteRequest('/api/roles-revision')).revision
     : ipcRenderer.invoke('roles:revision'),
+  waitForRolesRevision: async (sinceRevision) => remoteSession
+    ? (await remoteRequest(`/api/roles-revision/wait?since=${encodeURIComponent(sinceRevision || 0)}&timeout=25000`)).revision
+    : ipcRenderer.invoke('roles:revision'),
   createRole: async (roleData) => remoteSession
     ? await remoteRequest('/api/roles', { method: 'POST', body: JSON.stringify(roleData) })
     : ipcRenderer.invoke('roles:create', roleData),

@@ -18,7 +18,8 @@ import {
   ArrowUpDown,
   Plus,
   Trash2,
-  FileEdit
+  FileEdit,
+  Download
 } from 'lucide-react';
 import { showStyledAlert } from '../utils/alert';
 import { toastSuccess, toastError, toastWarning } from '../utils/toast';
@@ -1079,6 +1080,175 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
     return sortTrabajoRowsLikeExcel(filtered, sortLevels, mesas);
   }, [filteredExpedientesExcel, sortLevels, mesas, searchQuery, selectedMesaFilter, can]);
 
+  const handleExportExcel = async () => {
+    try {
+      const XLSXModule = await import('xlsx-js-style');
+      const XLSX = (XLSXModule.default || XLSXModule) as any;
+      const isHistoryTab = activeTab === 'historial';
+      const statusBands: EstatusBand[] = [];
+      const statusColors: Record<EstatusBand, string> = {
+        GREEN: '6FA191',
+        YELLOW: 'D9AD52',
+        PINK: 'DF9A8F',
+        RED: 'C7472D',
+        EMPTY: '64748B',
+      };
+      const rows = isHistoryTab
+        ? historyList.map((hist) => ({
+            Expediente: hist.expediente || '-',
+            Mesa: hist.mesaNombre || '-',
+            Persona: hist.personaMesa || '-',
+            Estatus: hist.estatusAtendido || '-',
+            'Fecha Acuerdo': hist.fechaAcuerdo || '-',
+            Observaciones: hist.observaciones || '-',
+            'Oficial / Capturo': hist.usuarioNombre || '-',
+            Rol: hist.rol || '-',
+            'Fecha Captura': hist.fechaCaptura ? new Date(hist.fechaCaptura).toLocaleString() : '-',
+            'Fecha Envio Historial': hist.fechaEnvioHistorial ? new Date(hist.fechaEnvioHistorial).toLocaleString() : '-',
+          }))
+        : filteredExpedientes.map((exp, index) => {
+            const personaMesa = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.NOMBRE || '';
+            const mesaTexto = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.MESA || '-';
+            const capturadoPorNombre =
+              users.find(u => Number(u.IdUsuario) === Number(exp.usuarioCapturaTrabajo))?.NombreCompleto ||
+              users.find(u => Number(u.IdUsuario) === Number(exp.usuarioCapturaTrabajo))?.Usuario ||
+              '-';
+            const estatusBand = getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos);
+            statusBands.push(estatusBand);
+
+            return {
+              'No. Orden': index + 1,
+              'Juicio / Expediente': exp.numeroJuicio || '-',
+              Mesa: mesaTexto,
+              Persona: personaMesa || '-',
+              'Ultimo Requerimiento': formatDateDMY(exp.ultimoRequerimiento) || '-',
+              'Dias Naturales': exp.diasNaturalesTranscurridos || '-',
+              'Dias Habiles': exp.diasHabilesTranscurridos || '-',
+              Estatus: estatusBand === 'EMPTY' ? '-' : '●',
+              'Fec. Vista Cumplimiento': formatDateDMY(exp.fechaVistaCumpli) || '-',
+              'Fec. Vista (Recibe Jzdo)': formatDateDMY(exp.fechaVista) || '-',
+              'Fecha Acuerdo': formatDateDMY(exp.fechaAcuerdo) || '-',
+              'Estatus Atencion': deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo),
+              'Observaciones Trabajo Diario': exp.observacionesDiario || '-',
+              'Capturado Por': capturadoPorNombre,
+              'Fecha Captura': exp.fechaCapturaTrabajo ? new Date(exp.fechaCapturaTrabajo).toLocaleString() : '-',
+            };
+          });
+
+      if (rows.length === 0) {
+        toastWarning('Sin datos para exportar', 'La tabla actual no tiene registros.');
+        return;
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const headers = Object.keys(rows[0]);
+      worksheet['!cols'] = headers.map((header) => ({
+        width: Math.min(
+          46,
+          Math.max(
+            header.length + 2,
+            ...rows.map((row: Record<string, any>) => String(row[header] ?? '').length + 2)
+          )
+        ),
+      }));
+
+      const range = XLSX.utils.decode_range(worksheet['!ref']);
+      for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+        for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+          const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+          const cell = worksheet[address];
+          if (cell) {
+            cell.s = {
+              ...(cell.s || {}),
+              alignment: { horizontal: 'left', vertical: 'center' },
+            };
+          }
+        }
+      }
+
+      headers.forEach((_, index) => {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: 0, c: index })];
+        if (cell) {
+          cell.s = {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { patternType: 'solid', fgColor: { rgb: '1E40AF' } },
+            alignment: { horizontal: 'left', vertical: 'center' },
+          };
+        }
+      });
+
+      if (!isHistoryTab) {
+        const statusColumnIndex = headers.indexOf('Estatus');
+        if (statusColumnIndex >= 0) {
+          statusBands.forEach((band, rowIndex) => {
+            const cell = worksheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: statusColumnIndex })];
+            if (cell) {
+              cell.s = {
+                ...(cell.s || {}),
+                font: {
+                  ...(cell.s?.font || {}),
+                  bold: true,
+                  sz: 18,
+                  color: { rgb: statusColors[band] },
+                },
+                alignment: { horizontal: 'center', vertical: 'center' },
+              };
+            }
+          });
+        }
+      }
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, isHistoryTab ? 'Historial' : 'Trabajo Diario');
+      const output = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'array',
+        cellStyles: true,
+        bookSST: true,
+      });
+      const blob = new Blob([output], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const fileName = `${isHistoryTab ? 'HISTORIAL_CAPTURAS' : 'TRABAJO_DIARIO'}_${dateStamp}.xlsx`;
+      const showSaveFilePicker = (window as any).showSaveFilePicker;
+
+      if (typeof showSaveFilePicker === 'function') {
+        try {
+          const fileHandle = await showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{
+              description: 'Microsoft Excel Worksheet',
+              accept: {
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+              },
+            }],
+          });
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (saveError: any) {
+          if (saveError?.name === 'AbortError') return;
+          throw saveError;
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      toastSuccess('Excel exportado', `Se exportaron ${rows.length} registros.`);
+    } catch (error) {
+      console.error('No se pudo exportar Trabajo Diario a Excel', error);
+      toastError('Error al exportar', error instanceof Error ? error.message : 'No se pudo exportar el archivo Excel.');
+    }
+  };
+
   const getRowColor = (exp: any) => {
     switch (getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos)) {
       case 'GREEN':
@@ -1100,7 +1270,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       setOpenHistoryMesaDropdown(false);
     }}>
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 flex-shrink-0">
+      <div className="flex items-center border-b border-slate-200 flex-shrink-0">
         <button
           onClick={() => setActiveTab('vivos')}
           className={`flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 transition-colors ${
@@ -1125,6 +1295,15 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
             Historial de Capturas
           </button>
         )}
+        <button
+          onClick={handleExportExcel}
+          disabled={(activeTab === 'vivos' && loading) || (activeTab === 'historial' && loadingHistory)}
+          className="ml-auto mr-4 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-600 px-3 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Exportar Excel"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Exportar Excel
+        </button>
       </div>
 
       {/* Tab: Vivos */}

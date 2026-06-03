@@ -32,19 +32,6 @@ import TrabajoDiario from "./components/TrabajoDiario";
 import { confirmAlert, showStyledAlert } from "./utils/alert";
 import { toastError, toastSuccess, toastWarning } from "./utils/toast";
 
-interface Expediente {
-  id: string;
-  numeroJuicio: string;
-  materia: string;
-  fechaVista: string;
-  fechaCumplimiento: string;
-  fechaArchivo: string;
-  actualizado: string;
-  localizado: boolean;
-  estatus: number | string;
-  diasHabilesTranscurridos: number | string;
-}
-
 interface DiaInhabil {
   id: string;
   fecha: string;
@@ -1004,7 +991,6 @@ function DiasInhabilesView({
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewKey>("cumplimientos");
-  const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [diasInhabiles, setDiasInhabiles] = useState<DiaInhabil[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentNow, setCurrentNow] = useState(() => new Date());
@@ -1051,15 +1037,13 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
 
-    getBackend()
-      .list()
-      .then((rows) => Array.isArray(rows) && setExpedientes(rows))
-      .catch(() => {});
+    if (currentView !== "dias-inhabiles") return;
+
     getBackend()
       .listInhabiles()
       .then((rows) => Array.isArray(rows) && setDiasInhabiles(rows))
       .catch(() => {});
-  }, [session]);
+  }, [session, currentView]);
 
   useEffect(() => {
     if (!session) return;
@@ -1078,37 +1062,50 @@ export default function App() {
     let cancelled = false;
     let reloadScheduled = false;
 
-    const checkRolesRevision = async () => {
+    const reloadForPermissionChange = () => {
+      if (reloadScheduled) return;
+      reloadScheduled = true;
+      toastWarning(
+        "Permisos actualizados",
+        "Se detecto un cambio en roles y permisos. El sistema se recargara.",
+      );
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    };
+
+    const watchRolesRevision = async () => {
       try {
-        const revision = Number(await window.api.getRolesRevision?.());
-        if (cancelled || !Number.isFinite(revision)) return;
+        const initialRevision = Number(await window.api.getRolesRevision?.());
+        if (cancelled || !Number.isFinite(initialRevision)) return;
+        rolesRevisionRef.current = initialRevision;
 
-        if (rolesRevisionRef.current === null) {
-          rolesRevisionRef.current = revision;
-          return;
-        }
-
-        if (revision !== rolesRevisionRef.current && !reloadScheduled) {
-          reloadScheduled = true;
-          toastWarning(
-            "Permisos actualizados",
-            "Se detecto un cambio en roles y permisos. El sistema se recargara.",
+        while (!cancelled && !reloadScheduled) {
+          const currentRevision = rolesRevisionRef.current ?? initialRevision;
+          const nextRevision = Number(
+            window.api.waitForRolesRevision
+              ? await window.api.waitForRolesRevision(currentRevision)
+              : await window.api.getRolesRevision?.(),
           );
-          window.setTimeout(() => {
-            window.location.reload();
-          }, 1200);
+
+          if (cancelled || !Number.isFinite(nextRevision)) return;
+          if (nextRevision !== currentRevision) {
+            rolesRevisionRef.current = nextRevision;
+            reloadForPermissionChange();
+            return;
+          }
         }
       } catch {
-        // If the server is temporarily unavailable, keep the current session alive.
+        if (!cancelled && !reloadScheduled) {
+          window.setTimeout(watchRolesRevision, 5000);
+        }
       }
     };
 
-    checkRolesRevision();
-    const interval = window.setInterval(checkRolesRevision, 5000);
+    watchRolesRevision();
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
     };
   }, [session?.apiUrl]);
 
@@ -1163,7 +1160,7 @@ export default function App() {
               <h1 className="text-xl font-black tracking-normal whitespace-nowrap">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
-                <span className="ml-1 text-black">v9.4</span>
+                <span className="ml-1 text-black">v9.5</span>
               </h1>
             </div>
           )}

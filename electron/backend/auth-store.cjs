@@ -565,6 +565,7 @@ function updateUser(IdUsuario, { IdRol, Activo, NombreCompleto, Password, IdMesa
   const database = getDb();
   const setClauses = [];
   const values = [];
+  const affectsSessionPermissions = IdRol !== undefined || Activo !== undefined;
 
   if (IdRol !== undefined) {
     setClauses.push('"IdRol" = ?');
@@ -594,6 +595,10 @@ function updateUser(IdUsuario, { IdRol, Activo, NombreCompleto, Password, IdMesa
     `UPDATE "USUARIOS" SET ${setClauses.join(', ')} WHERE "IdUsuario" = ?`
   ).run(...values);
 
+  if (affectsSessionPermissions) {
+    bumpRolesRevision();
+  }
+
   return { ok: true };
 }
 
@@ -609,6 +614,7 @@ function deleteUser(IdUsuario) {
   }
 
   database.prepare('DELETE FROM "USUARIOS" WHERE "IdUsuario" = ?').run(IdUsuario);
+  bumpRolesRevision();
   return { ok: true };
 }
 

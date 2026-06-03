@@ -141,6 +141,7 @@ declare global {
       listPermissions: () => Promise<PermissionRecord[]>;
       listRolesWithPermissions: () => Promise<RoleWithPermissionsRecord[]>;
       getRolesRevision?: () => Promise<number>;
+      waitForRolesRevision?: (sinceRevision: number) => Promise<number>;
       createRole: (roleData: {
         NombreRol: string;
         Permisos?: string[];
