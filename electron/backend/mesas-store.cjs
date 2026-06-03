@@ -15,6 +15,14 @@ function databaseFile() {
 
 let db;
 
+function invalidateCumplimientosCache() {
+  try {
+    require('./store.cjs').invalidateCumplimientosCache();
+  } catch {
+    // Store may not be initialized yet.
+  }
+}
+
 function getDb() {
   if (!db) {
     db = new DatabaseSync(databaseFile());
@@ -176,9 +184,10 @@ function deleteMesa(id) {
     database.prepare('UPDATE "CUMPLIMIENTOS" SET "ID_MESA" = NULL WHERE "ID_MESA" = ?').run(mesaId);
     database.prepare(`DELETE FROM "HISTORIAL_ASIGNACION_MESAS" WHERE "ID_MESA_NUEVA" = ? OR "ID_MESA_ANTERIOR" = ?`).run(mesaId, mesaId);
     const result = database.prepare(`DELETE FROM "MESAS_TRAMITE" WHERE "ID_MESA" = ?`).run(mesaId);
-    database.exec('COMMIT');
-
-    if (result.changes === 0) {
+	    database.exec('COMMIT');
+	    invalidateCumplimientosCache();
+	
+	    if (result.changes === 0) {
       return { ok: false, error: 'La mesa no existe' };
     }
   } catch (error) {
@@ -343,6 +352,7 @@ function reassignMesa({ expedienteRowid, expediente, newMesaId, userId, userName
       "USUARIO_ID", "USUARIO_NOMBRE", "MOTIVO", "FECHA_REASIGNACION"
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(row.rowid, row.expediente, oldMesaId, newMesaId, userId, userName, cleanMotivo, now);
+  invalidateCumplimientosCache();
 
   return {
     ok: true,
@@ -622,9 +632,10 @@ function importMesaAssignments(rows) {
       updateStmt.run(idMesaVal, expRow.rowid);
       insertHistoryStmt.run(expRow.rowid, expRow.expediente, expRow.idMesa, idMesaVal, null, 'Importación Excel', 'Importación masiva', now);
       totalUpdated++;
-    }
-    database.exec('COMMIT');
-  } catch (err) {
+	    }
+	    database.exec('COMMIT');
+	    if (totalUpdated > 0) invalidateCumplimientosCache();
+	  } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }
@@ -776,9 +787,10 @@ function autoAssignMesas(userId, userName) {
   try {
     requiringAssignedCount = assignBatch(requiringUnassigned);
     vistaAssignedCount = assignBatch(vistaUnassigned);
-    otherAssignedCount = assignBatch(otherUnassigned);
-    database.exec('COMMIT');
-  } catch (err) {
+	    otherAssignedCount = assignBatch(otherUnassigned);
+	    database.exec('COMMIT');
+	    if (assignedCount > 0) invalidateCumplimientosCache();
+	  } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }
@@ -790,18 +802,48 @@ function autoAssignMesas(userId, userName) {
  * Daily Work
  * ──────────────────────────────────────────── */
 
+function hasActiveRequerimientoStatus(expediente) {
+  const estatus = String(expediente?.estatus || '').trim();
+  const numericStatus = Number(estatus);
+  if (estatus && Number.isFinite(numericStatus)) return true;
+
+  return ['EN_PLAZO', 'ATENCION', 'REQUERIR', 'VENCIDO', 'CERRADO'].includes(estatus);
+}
+
+function deriveTrabajoDiarioStatus(expediente, fechaAcuerdoIso) {
+  const { toIsoDate } = require('./cumplimientos.cjs');
+  const ultimoRequerimiento = toIsoDate(expediente?.ultimoRequerimiento || '');
+
+  if (hasActiveRequerimientoStatus(expediente)) {
+    return ultimoRequerimiento && fechaAcuerdoIso && ultimoRequerimiento === fechaAcuerdoIso
+      ? 'ATENDIDA'
+      : 'SIN ATENDER';
+  }
+
+  const fechaVista = toIsoDate(expediente?.fechaVista || '');
+  if (fechaVista) {
+    const fechasPronunciamiento = [
+      expediente?.fechaCumplimiento,
+      expediente?.fechaPorNoCumplida,
+      expediente?.seDeclaroSinMateria,
+    ].map((value) => toIsoDate(value || ''));
+
+    return fechaAcuerdoIso && fechasPronunciamiento.some((value) => value && value === fechaAcuerdoIso)
+      ? 'ATENDIDA'
+      : 'SIN ATENDER';
+  }
+
+  return 'SIN ATENDER';
+}
+
 function captureTrabajoDiario({ expedienteRowid, fechaAcuerdo, observaciones, userId, userName }) {
   const database = getDb();
   const now = new Date().toISOString();
   const { toIsoDate } = require('./cumplimientos.cjs');
   const { getCumplimientos } = require('./store.cjs');
   const expediente = getCumplimientos().find((row) => Number(row.id) === Number(expedienteRowid));
-  const ultimoRequerimiento = toIsoDate(expediente?.ultimoRequerimiento || '');
   const fechaAcuerdoIso = toIsoDate(fechaAcuerdo || '');
-  const estatusAtendido =
-    ultimoRequerimiento && fechaAcuerdoIso && ultimoRequerimiento === fechaAcuerdoIso
-      ? 'ATENDIDA'
-      : 'SIN ATENDER';
+  const estatusAtendido = deriveTrabajoDiarioStatus(expediente, fechaAcuerdoIso);
 
   database.prepare(`
     UPDATE "CUMPLIMIENTOS"
@@ -811,27 +853,28 @@ function captureTrabajoDiario({ expedienteRowid, fechaAcuerdo, observaciones, us
         "FECHA_CAPTURA_TRABAJO" = ?,
         "USUARIO_CAPTURA_TRABAJO" = ?
     WHERE rowid = ?
-  `).run(estatusAtendido, fechaAcuerdoIso, observaciones, now, userId, expedienteRowid);
-  return { ok: true };
+	  `).run(estatusAtendido, fechaAcuerdoIso, observaciones, now, userId, expedienteRowid);
+	  invalidateCumplimientosCache();
+	  return { ok: true };
+}
+
+function shouldShowInTrabajoDiario(row) {
+  const cumplimiento = String(row.fechaCumplimiento || '').trim();
+  if (!cumplimiento) return true;
+
+  const fechaVista = String(row.fechaVista || '').trim();
+  const estatusAtendido = String(row.estatusAtendido || '').trim();
+  return Boolean(fechaVista) && estatusAtendido !== 'ATENDIDA';
 }
 
 function getExpedientesByMesa(mesaId) {
-  const { getCumplimientos } = require('./store.cjs');
-  const list = getCumplimientos();
-  return list.filter(row => {
-    if (Number(row.idMesa) !== Number(mesaId)) return false;
-    const cumplimiento = String(row.fechaCumplimiento || '').trim();
-    return !cumplimiento;
-  });
+  const { getCumplimientosTrabajoDiario } = require('./store.cjs');
+  return getCumplimientosTrabajoDiario(mesaId).filter(shouldShowInTrabajoDiario);
 }
 
 function getExpedientesAllMesas() {
-  const { getCumplimientos } = require('./store.cjs');
-  const list = getCumplimientos();
-  return list.filter(row => {
-    const cumplimiento = String(row.fechaCumplimiento || '').trim();
-    return !cumplimiento;
-  });
+  const { getCumplimientosTrabajoDiario } = require('./store.cjs');
+  return getCumplimientosTrabajoDiario().filter(shouldShowInTrabajoDiario);
 }
 
 function getHistorialTrabajoDiario(filters = {}) {
@@ -1007,6 +1050,7 @@ function flushTrabajoDiarioToHistory() {
   `).all();
 
   let processed = 0;
+  let touchedCumplimientos = false;
   const logs = [];
 
   database.exec('BEGIN');
@@ -1016,6 +1060,7 @@ function flushTrabajoDiarioToHistory() {
       if (!fechaCaptura) {
         database.prepare('UPDATE "CUMPLIMIENTOS" SET "FECHA_CAPTURA_TRABAJO" = ? WHERE rowid = ?')
           .run(now.toISOString(), row.rowid);
+        touchedCumplimientos = true;
         continue;
       }
 
@@ -1088,13 +1133,15 @@ function flushTrabajoDiarioToHistory() {
               "USUARIO_CAPTURA_TRABAJO" = NULL
           WHERE rowid = ?
         `).run(row.rowid);
+        touchedCumplimientos = true;
 
         processed++;
         logs.push(`Expediente ${row['NÚMERO DE JUICIO']} enviado al historial.`);
       }
-    }
-    database.exec('COMMIT');
-  } catch (err) {
+	    }
+	    database.exec('COMMIT');
+	    if (touchedCumplimientos) invalidateCumplimientosCache();
+	  } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }

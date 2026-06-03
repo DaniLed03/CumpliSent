@@ -44,7 +44,20 @@ const CUMPLIMIENTOS_COLUMNS = [
 ];
 
 function quoteIdentifier(identifier) {
-  return `"${String(identifier).replace(/"/g, '""')}"`;
+  const text = String(identifier);
+  if (text.includes('MERO DE ORDEN')) {
+    return `"${cumplimientoColumnName('numeroOrden').replace(/"/g, '""')}"`;
+  }
+  if (text.includes('MERO DE JUICIO')) {
+    return `"${cumplimientoColumnName('numeroJuicio').replace(/"/g, '""')}"`;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function cumplimientoColumnName(property) {
+  const column = CUMPLIMIENTOS_COLUMNS.find(([prop]) => prop === property);
+  if (!column) throw new Error(`Columna de cumplimiento no configurada: ${property}`);
+  return column[1];
 }
 
 function dataDir() {
@@ -62,6 +75,13 @@ function getDatabasePath() {
 }
 
 let db;
+let cumplimientosCache = null;
+const trabajoDiarioCache = new Map();
+
+function invalidateCumplimientosCache() {
+  cumplimientosCache = null;
+  trabajoDiarioCache.clear();
+}
 
 function getDb() {
   if (!db) {
@@ -333,19 +353,71 @@ function replaceDiasInhabiles(dias = []) {
     items.forEach((fecha) => insertDia.run(fecha));
   }, formattedDates);
 
+  invalidateCumplimientosCache();
   return getDiasInhabiles();
 }
 
 function getCumplimientos() {
+  if (cumplimientosCache) {
+    return cumplimientosCache;
+  }
+
   const inhabiles = getDiasInhabiles().map((dia) => dia.fecha);
 
-  return getDb()
+  cumplimientosCache = getDb()
     .prepare(`SELECT rowid, * FROM ${quoteIdentifier('CUMPLIMIENTOS')} ORDER BY ${quoteIdentifier('NÚMERO DE ORDEN')} ASC`)
     .all()
     .map((row, index) => {
       const normalizado = normalizarCumplimiento(fromDatabaseRow(row, index), index);
       return calcularCumplimiento(normalizado, inhabiles);
     });
+
+  return cumplimientosCache;
+}
+
+function getCumplimientosTrabajoDiario(mesaId) {
+  const cacheKey = mesaId === undefined || mesaId === null || mesaId === '' ? 'all' : String(mesaId);
+  if (trabajoDiarioCache.has(cacheKey)) {
+    return trabajoDiarioCache.get(cacheKey);
+  }
+
+  const values = [];
+  const clauses = [`
+    (
+      ${quoteIdentifier('FECHA DE CUMPLIMIENTO')} IS NULL
+      OR TRIM(${quoteIdentifier('FECHA DE CUMPLIMIENTO')}) = ''
+      OR (
+        ${quoteIdentifier('FECHA DE VISTA')} IS NOT NULL
+        AND TRIM(${quoteIdentifier('FECHA DE VISTA')}) <> ''
+        AND (
+          ${quoteIdentifier('ESTATUS_ATENDIDO')} IS NULL
+          OR TRIM(${quoteIdentifier('ESTATUS_ATENDIDO')}) <> 'ATENDIDA'
+        )
+      )
+    )
+  `];
+
+  if (mesaId !== undefined && mesaId !== null && mesaId !== '') {
+    clauses.push(`${quoteIdentifier('ID_MESA')} = ?`);
+    values.push(Number(mesaId));
+  }
+
+  const inhabiles = getDiasInhabiles().map((dia) => dia.fecha);
+  const numeroOrdenColumn = cumplimientoColumnName('numeroOrden');
+  const rows = getDb()
+    .prepare(`
+      SELECT rowid, * FROM ${quoteIdentifier('CUMPLIMIENTOS')}
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY ${quoteIdentifier(numeroOrdenColumn)} ASC
+    `)
+    .all(...values)
+    .map((row, index) => {
+      const normalizado = normalizarCumplimiento(fromDatabaseRow(row, index), index);
+      return calcularCumplimiento(normalizado, inhabiles);
+    });
+
+  trabajoDiarioCache.set(cacheKey, rows);
+  return rows;
 }
 
 function recalculateCumplimientos() {
@@ -357,6 +429,7 @@ function recalculateCumplimientos() {
     database.exec(`DELETE FROM ${quoteIdentifier('CUMPLIMIENTOS')}`);
     items.forEach((item) => insertCumplimiento.run(...toDatabaseRow(item)));
   }, calculados);
+  cumplimientosCache = calculados;
   return calculados;
 }
 
@@ -390,6 +463,7 @@ function updateCumplimientosDesdeSentencias(sentencias = []) {
     items.forEach((item) => insertCumplimiento.run(...toDatabaseRow(item)));
   }, updatedRows);
 
+  invalidateCumplimientosCache();
   const rows = getCumplimientos();
 
   return {
@@ -501,6 +575,7 @@ function importCumplimientosRows(importRows = []) {
     items.forEach((item) => insertCumplimiento.run(...toDatabaseRow(item)));
   }, calculatedRows);
 
+  invalidateCumplimientosCache();
   const rows = getCumplimientos();
 
   return {
@@ -551,6 +626,7 @@ function addCumplimientos(rows = []) {
     items.forEach((item) => insertCumplimiento.run(...toDatabaseRow(item)));
   }, rowsToInsert);
 
+  invalidateCumplimientosCache();
   return {
     inserted: rowsToInsert.length,
     rows: getCumplimientos(),
@@ -632,6 +708,7 @@ function patchCumplimiento(id, patch = {}) {
     .run(...values);
 
   syncFechaVistaCumpliWithFechaVista(database);
+  invalidateCumplimientosCache();
 
   const updated = database
     .prepare(`SELECT rowid, * FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE rowid = ?`)
@@ -658,6 +735,7 @@ function deleteCumplimiento(id) {
   }
 
   database.prepare(`DELETE FROM ${quoteIdentifier('CUMPLIMIENTOS')} WHERE rowid = ?`).run(rowid);
+  invalidateCumplimientosCache();
   return true;
 }
 
@@ -665,8 +743,10 @@ module.exports = {
   addCumplimientos,
   getDatabasePath,
   getCumplimientos,
+  getCumplimientosTrabajoDiario,
   getCumplimientoColumnNames,
   getDiasInhabiles,
+  invalidateCumplimientosCache,
   initializeStore,
   importCumplimientosRows,
   patchCumplimiento,

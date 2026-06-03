@@ -1,4 +1,5 @@
 import Swal, { SweetAlertIcon } from 'sweetalert2';
+import { showToast, type ToastType } from './toast';
 
 export type ConfirmAlertOptions = {
   title?: string;
@@ -106,38 +107,21 @@ export const confirmAlert = async (opts: ConfirmAlertOptions = {}) => {
 };
 
 export const showStyledAlert = async (opts: StyledAlertOptions = {}) => {
-  ensureAlertStyles();
-
   const {
     title = 'Aviso',
     text = '',
-    confirmText = 'Aceptar',
     icon = 'info',
   } = opts;
 
-  return Swal.fire({
-    title,
-    text,
-    icon,
-    confirmButtonText: confirmText,
-    buttonsStyling: false,
-    customClass: {
-      popup: popupClass,
-      title: titleClass,
-      htmlContainer: htmlClass,
-      actions: actionsClass,
-      confirmButton: primaryClass,
-    },
-    didOpen: () => {
-      document.body.setAttribute(CANVAS_OVERLAY_OPEN_ATTR, 'true');
-    },
-    willClose: () => {
-      document.body.removeAttribute(CANVAS_OVERLAY_OPEN_ATTR);
-    },
-    didDestroy: () => {
-      document.body.removeAttribute(CANVAS_OVERLAY_OPEN_ATTR);
-    },
-  });
+  const type: ToastType =
+    icon === 'error'
+      ? 'error'
+      : icon === 'success'
+        ? 'success'
+        : 'warning';
+
+  document.body.removeAttribute(CANVAS_OVERLAY_OPEN_ATTR);
+  return showToast(type, title, text);
 };
 
 export const closeStyledAlert = () => {

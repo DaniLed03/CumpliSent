@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { SortDirection, DateFilterTreeNode, MONTH_NAMES, TriStateCheckbox, parseSortDate, parseDateFilterOption, buildDateFilterTree, getFilterMenuSortLabel } from './FilterUtils';
 import {
@@ -21,7 +21,6 @@ import {
   FileEdit,
   Download
 } from 'lucide-react';
-import { showStyledAlert } from '../utils/alert';
 import { toastSuccess, toastError, toastWarning } from '../utils/toast';
 
 interface TrabajoDiarioProps {
@@ -73,7 +72,7 @@ const TRABAJO_SORT_COLUMNS: Array<{ key: string; label: string; type: TrabajoSor
   { key: 'estatusCumplimiento', label: 'ESTATUS', type: 'estatus' },
   { key: 'fechaVistaCumpli', label: 'FEC. VISTA CUMPLIMIENTO', type: 'date' },
   { key: 'fechaVista', label: 'FEC. VISTA (RECIBE JZDO)', type: 'date' },
-  { key: 'fechaAcuerdo', label: 'FECHA ACUERDO', type: 'date' },
+  { key: 'fechaAcuerdo', label: 'FECHA DE ATENCIÃ“N', type: 'date' },
   { key: 'estatus', label: 'ESTATUS ATENCION', type: 'estatus' },
   { key: 'observaciones', label: 'OBSERVACIONES TRABAJO DIARIO', type: 'text' },
   { key: 'capturadoPor', label: 'CAPTURADO POR', type: 'text' },
@@ -81,6 +80,8 @@ const TRABAJO_SORT_COLUMNS: Array<{ key: string; label: string; type: TrabajoSor
 ];
 
 const TRABAJO_SORT_STORAGE_KEY = 'trabajo_diario.sortLevels.v1';
+const TRABAJO_ROW_HEIGHT = 48;
+const TRABAJO_ROW_OVERSCAN = 16;
 
 function getTrabajoSortColumn(key: string) {
   return TRABAJO_SORT_COLUMNS.find((column) => column.key === key) || TRABAJO_SORT_COLUMNS[0];
@@ -226,18 +227,18 @@ function isTrabajoSortBlank(value: unknown) {
   return value === null || value === undefined || String(value).trim() === '' || String(value).trim() === '-';
 }
 
-function getTrabajoRawSortValue(exp: any, key: string, mesas: MesaRecord[]) {
+function getTrabajoRawSortValue(exp: any, key: string, mesasById: Map<number, MesaRecord>) {
   switch (key) {
     case 'numeroOrden':
       return exp.numeroOrden;
     case 'juicio':
       return exp.numeroJuicio;
     case 'mesa': {
-      const mesa = mesas.find((item) => Number(item.ID_MESA) === Number(exp.idMesa));
+      const mesa = mesasById.get(Number(exp.idMesa));
       return mesa?.MESA || '';
     }
     case 'persona': {
-      const mesa = mesas.find((item) => Number(item.ID_MESA) === Number(exp.idMesa));
+      const mesa = mesasById.get(Number(exp.idMesa));
       return mesa?.NOMBRE || '';
     }
     case 'ultimoRequerimiento':
@@ -255,7 +256,7 @@ function getTrabajoRawSortValue(exp: any, key: string, mesas: MesaRecord[]) {
     case 'fechaAcuerdo':
       return exp.fechaAcuerdo;
     case 'estatus':
-      return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
+      return deriveTrabajoStatus(exp);
     case 'observaciones':
       return exp.observacionesDiario;
     case 'capturadoPor':
@@ -267,9 +268,9 @@ function getTrabajoRawSortValue(exp: any, key: string, mesas: MesaRecord[]) {
   }
 }
 
-function normalizeTrabajoSortValue(exp: any, level: TrabajoSortLevel, mesas: MesaRecord[]) {
+function normalizeTrabajoSortValue(exp: any, level: TrabajoSortLevel, mesasById: Map<number, MesaRecord>) {
   const column = getTrabajoSortColumn(level.column);
-  const value = getTrabajoRawSortValue(exp, level.column, mesas);
+  const value = getTrabajoRawSortValue(exp, level.column, mesasById);
 
   if (level.column === 'estatusCumplimiento') {
     const rank = getEstatusSortNumber(exp);
@@ -291,7 +292,7 @@ function compareTrabajoRowsLikeExcel(
   left: any,
   right: any,
   levels: TrabajoSortLevel[],
-  mesas: MesaRecord[],
+  mesasById: Map<number, MesaRecord>,
   leftOriginalIndex: number,
   rightOriginalIndex: number
 ) {
@@ -302,8 +303,8 @@ function compareTrabajoRowsLikeExcel(
 
   for (const level of levels) {
     const column = getTrabajoSortColumn(level.column);
-    const leftRaw = getTrabajoRawSortValue(left, level.column, mesas);
-    const rightRaw = getTrabajoRawSortValue(right, level.column, mesas);
+    const leftRaw = getTrabajoRawSortValue(left, level.column, mesasById);
+    const rightRaw = getTrabajoRawSortValue(right, level.column, mesasById);
     const leftBlank = level.column === 'estatusCumplimiento'
       ? getEstatusBand(left.estatus, left.diasHabilesTranscurridos) === 'EMPTY'
       : isTrabajoSortBlank(leftRaw);
@@ -321,8 +322,8 @@ function compareTrabajoRowsLikeExcel(
       return -1;
     }
 
-    const leftValue = normalizeTrabajoSortValue(left, level, mesas);
-    const rightValue = normalizeTrabajoSortValue(right, level, mesas);
+    const leftValue = normalizeTrabajoSortValue(left, level, mesasById);
+    const rightValue = normalizeTrabajoSortValue(right, level, mesasById);
     let comparison = 0;
 
     if (level.column === 'estatusCumplimiento') {
@@ -358,7 +359,7 @@ function compareTrabajoRowsLikeExcel(
   return leftOriginalIndex - rightOriginalIndex;
 }
 
-function sortTrabajoRowsLikeExcel(rows: any[], levels: TrabajoSortLevel[], mesas: MesaRecord[]) {
+function sortTrabajoRowsLikeExcel(rows: any[], levels: TrabajoSortLevel[], mesasById: Map<number, MesaRecord>) {
   const activeLevels = levels.slice(0, 64).filter((level) => level.column);
   if (activeLevels.length === 0) {
     return rows;
@@ -370,7 +371,7 @@ function sortTrabajoRowsLikeExcel(rows: any[], levels: TrabajoSortLevel[], mesas
       left.row,
       right.row,
       activeLevels,
-      mesas,
+      mesasById,
       left.originalIndex,
       right.originalIndex
     ))
@@ -460,10 +461,52 @@ function formatDateDMY(value: unknown) {
   return text;
 }
 
-function deriveTrabajoStatus(ultimoRequerimiento: unknown, fechaAcuerdo: unknown) {
-  const ultimo = normalizeIsoDate(ultimoRequerimiento);
+function isExpedienteEnRequerimiento(exp: any) {
+  return getEstatusBand(exp?.estatus, exp?.diasHabilesTranscurridos) !== 'EMPTY';
+}
+
+function isExpedienteEnVistaConCumplimiento(exp: any) {
+  return Boolean(normalizeIsoDate(exp?.fechaVista));
+}
+
+function getFechasPronunciamiento(exp: any) {
+  return [
+    exp?.fechaCumplimiento,
+    exp?.fechaPorNoCumplida,
+    exp?.seDeclaroSinMateria,
+  ].map(normalizeIsoDate);
+}
+
+function deriveTrabajoStatus(exp: any, fechaAcuerdo: unknown = exp?.fechaAcuerdo) {
   const acuerdo = normalizeIsoDate(fechaAcuerdo);
-  return ultimo && acuerdo && ultimo === acuerdo ? 'ATENDIDA' : 'SIN ATENDER';
+
+  if (isExpedienteEnRequerimiento(exp)) {
+    const ultimo = normalizeIsoDate(exp?.ultimoRequerimiento);
+    return ultimo && acuerdo && ultimo === acuerdo ? 'ATENDIDA' : 'SIN ATENDER';
+  }
+
+  if (isExpedienteEnVistaConCumplimiento(exp)) {
+    return acuerdo && getFechasPronunciamiento(exp).some((fecha) => fecha && fecha === acuerdo)
+      ? 'ATENDIDA'
+      : 'SIN ATENDER';
+  }
+
+  return 'SIN ATENDER';
+}
+
+function getTrabajoStatusMessage(exp: any, fechaAcuerdo: unknown = exp?.fechaAcuerdo) {
+  const acuerdo = normalizeIsoDate(fechaAcuerdo);
+  if (!acuerdo) return '';
+
+  if (isExpedienteEnRequerimiento(exp) && deriveTrabajoStatus(exp, acuerdo) === 'SIN ATENDER') {
+    return 'La Fecha de AtenciÃ³n no coincide con la fecha del Ãºltimo requerimiento.';
+  }
+
+  if (isExpedienteEnVistaConCumplimiento(exp) && deriveTrabajoStatus(exp, acuerdo) === 'SIN ATENDER') {
+    return 'La Fecha de AtenciÃ³n no coincide con Fecha de Cumplimiento, Fecha por No Cumplida o Fecha Sin Materia.';
+  }
+
+  return '';
 }
 
 export default function TrabajoDiario({ permissions, isAdmin, session }: TrabajoDiarioProps) {
@@ -472,6 +515,10 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
   const [expedientes, setExpedientes] = useState<any[]>([]);
   const [mesas, setMesas] = useState<MesaRecord[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [tableViewportHeight, setTableViewportHeight] = useState(640);
 
   // --- EXCEL HEADER FILTERS STATE ---
   const [tableColumnFilters, setTableColumnFilters] = useState<Record<string, string[]>>({});
@@ -588,7 +635,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       case 'fechaVistaCumpli': return String(formatDateDMY(exp.fechaVistaCumpli) || '-');
       case 'fechaVista': return String(formatDateDMY(exp.fechaVista) || '-');
       case 'fechaAcuerdo': return String(formatDateDMY(exp.fechaAcuerdo) || '-');
-      case 'estatus': return deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
+      case 'estatus': return deriveTrabajoStatus(exp);
       case 'observaciones': return String(exp.observacionesDiario || '');
       case 'capturadoPor': return String(exp.usuarioNombre || '');
       case 'fechaCaptura': return exp.fechaCapturaTrabajo ? new Date(exp.fechaCapturaTrabajo).toLocaleString() : '-';
@@ -630,7 +677,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
     setDraftTableFilterValues(tableColumnFilters[key] || getTableFilterOptions(key));
   };
 
-  const filteredExpedientesExcel = expedientes.filter(exp => {
+  const filteredExpedientesExcel = useMemo(() => expedientes.filter(exp => {
       for (const [key, selectedVals] of Object.entries(tableColumnFilters)) {
         if (selectedVals && selectedVals.length > 0) {
           if (!selectedVals.includes(getTableFilterValue(exp, key))) {
@@ -639,7 +686,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
         }
       }
       return true;
-  });
+  }), [expedientes, tableColumnFilters, getTableFilterValue]);
 
   
   const renderTableHeader = (key: string, label: string, type: 'date' | 'text' | 'number' | 'estatus' | 'boolean', className: string, title?: string) => {
@@ -889,36 +936,39 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
     return isAdmin || permissions.includes(p);
   }, [isAdmin, permissions]);
 
+  const mesasById = useMemo(() => {
+    return new Map(mesas.map((mesa) => [Number(mesa.ID_MESA), mesa]));
+  }, [mesas]);
+
+  const usersById = useMemo(() => {
+    return new Map(users.map((user) => [Number(user.IdUsuario), user]));
+  }, [users]);
+
   const loadData = useCallback(async (opts?: { showSuccessToast?: boolean }) => {
     setLoading(true);
     try {
-      // Load active mesas
-      const m = await window.api.listMesas();
-      setMesas(m || []);
+      const rowsPromise = can('view.trabajo_diario')
+        ? window.api.getExpedientesAllMesas()
+        : Promise.resolve([]);
+      const [m, u, rows] = await Promise.all([
+        window.api.listMesas(),
+        window.api.listUsers(),
+        rowsPromise,
+      ]);
 
-      // Load all users to map names if needed
-      const u = await window.api.listUsers();
-      setUsers(u || []);
-
-      // Load expedientes vivos
-      let rows: any[] = [];
-      if (can('view.trabajo_diario')) {
-        rows = await window.api.getExpedientesAllMesas();
-      }
+      // Load active mesas, users and expedientes in parallel.
       setExpedientes(rows || []);
+      setMesas(m || []);
+      setUsers(u || []);
       if (opts?.showSuccessToast) {
         toastSuccess('Datos recargados', 'La tabla de trabajo diario se actualizo correctamente.');
       }
     } catch (err: any) {
-      showStyledAlert({
-        title: 'Error',
-        text: err.message || 'No se pudieron cargar los expedientes vivos.',
-        icon: 'error'
-      });
+      toastError('Error', err.message || 'No se pudieron cargar los expedientes vivos.');
     } finally {
       setLoading(false);
     }
-  }, [session, can]);
+  }, [can]);
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -961,11 +1011,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
     // Check if it already has captured work
     const alreadyCaptured = !!(exp.estatusAtendido || exp.fechaAcuerdo || exp.observacionesDiario);
     if (alreadyCaptured && !can('trabajo.edit_today')) {
-      showStyledAlert({
-        title: 'Acción no permitida',
-        text: 'No tienes permisos para editar capturas de trabajo del día.',
-        icon: 'warning'
-      });
+      toastWarning('Acción no permitida', 'No tienes permisos para editar capturas de trabajo del día.');
       return;
     }
 
@@ -991,8 +1037,29 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
         userName: session?.user?.NombreCompleto || session?.user?.Usuario
       });
       setShowCaptureModal(false);
-      await loadData();
-      toastSuccess('Trabajo Diario capturado', 'La información se guardó correctamente.');
+      setExpedientes((current) => current.reduce<any[]>((nextRows, exp) => {
+        if (Number(exp.id) !== Number(selectedExpediente.id)) {
+          nextRows.push(exp);
+          return nextRows;
+        }
+
+        const updated = {
+          ...exp,
+          estatusAtendido: deriveTrabajoStatus(exp, formFechaAcuerdo),
+          fechaAcuerdo: formFechaAcuerdo,
+          observacionesDiario: formObservaciones.trim(),
+          fechaCapturaTrabajo: new Date().toISOString(),
+          usuarioCapturaTrabajo: session?.user?.IdUsuario,
+        };
+
+        if (updated.fechaCumplimiento && deriveTrabajoStatus(updated) === 'ATENDIDA') {
+          return nextRows;
+        }
+
+        nextRows.push(updated);
+        return nextRows;
+      }, []));
+      toastSuccess('Trabajo Diario capturado', 'La informaciÃ³n se guardÃ³ correctamente.');
     } catch (err: any) {
       setModalError(err.message || 'Error al guardar la captura.');
     } finally {
@@ -1077,8 +1144,50 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
       return matchesSearch && matchesMesa;
     });
 
-    return sortTrabajoRowsLikeExcel(filtered, sortLevels, mesas);
-  }, [filteredExpedientesExcel, sortLevels, mesas, searchQuery, selectedMesaFilter, can]);
+    return sortTrabajoRowsLikeExcel(filtered, sortLevels, mesasById);
+  }, [filteredExpedientesExcel, sortLevels, mesasById, searchQuery, selectedMesaFilter, can]);
+
+  const tableColSpan = can('trabajo.capture') ? 16 : 15;
+  const virtualRawStartIndex = Math.max(0, Math.floor(tableScrollTop / TRABAJO_ROW_HEIGHT) - TRABAJO_ROW_OVERSCAN);
+  const virtualStartIndex = Math.min(virtualRawStartIndex, Math.max(0, filteredExpedientes.length - 1));
+  const virtualVisibleCount = Math.ceil(tableViewportHeight / TRABAJO_ROW_HEIGHT) + TRABAJO_ROW_OVERSCAN * 2;
+  const virtualEndIndex = Math.min(filteredExpedientes.length, virtualStartIndex + virtualVisibleCount);
+  const virtualExpedientes = filteredExpedientes.slice(virtualStartIndex, virtualEndIndex);
+  const virtualTopPadding = virtualStartIndex * TRABAJO_ROW_HEIGHT;
+  const virtualBottomPadding = Math.max(0, (filteredExpedientes.length - virtualEndIndex) * TRABAJO_ROW_HEIGHT);
+
+  const handleTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    if (scrollRafRef.current !== null) return;
+
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      setTableScrollTop(target.scrollTop);
+      setTableViewportHeight(target.clientHeight || 640);
+    });
+  }, []);
+
+  useEffect(() => {
+    const node = tableScrollRef.current;
+    if (!node) return;
+    setTableScrollTop(node.scrollTop);
+    setTableViewportHeight(node.clientHeight || 640);
+  }, [filteredExpedientes.length, activeTab]);
+
+  useEffect(() => {
+    const node = tableScrollRef.current;
+    if (!node) return;
+    node.scrollTop = 0;
+    setTableScrollTop(0);
+  }, [searchQuery, selectedMesaFilter, tableColumnFilters, sortLevels]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, []);
 
   const handleExportExcel = async () => {
     try {
@@ -1099,7 +1208,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
             Mesa: hist.mesaNombre || '-',
             Persona: hist.personaMesa || '-',
             Estatus: hist.estatusAtendido || '-',
-            'Fecha Acuerdo': hist.fechaAcuerdo || '-',
+            'Fecha de AtenciÃ³n': hist.fechaAcuerdo || '-',
             Observaciones: hist.observaciones || '-',
             'Oficial / Capturo': hist.usuarioNombre || '-',
             Rol: hist.rol || '-',
@@ -1107,12 +1216,11 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
             'Fecha Envio Historial': hist.fechaEnvioHistorial ? new Date(hist.fechaEnvioHistorial).toLocaleString() : '-',
           }))
         : filteredExpedientes.map((exp, index) => {
-            const personaMesa = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.NOMBRE || '';
-            const mesaTexto = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.MESA || '-';
-            const capturadoPorNombre =
-              users.find(u => Number(u.IdUsuario) === Number(exp.usuarioCapturaTrabajo))?.NombreCompleto ||
-              users.find(u => Number(u.IdUsuario) === Number(exp.usuarioCapturaTrabajo))?.Usuario ||
-              '-';
+            const mesa = mesasById.get(Number(exp.idMesa));
+            const usuario = usersById.get(Number(exp.usuarioCapturaTrabajo));
+            const personaMesa = mesa?.NOMBRE || '';
+            const mesaTexto = mesa?.MESA || '-';
+            const capturadoPorNombre = usuario?.NombreCompleto || usuario?.Usuario || '-';
             const estatusBand = getEstatusBand(exp.estatus, exp.diasHabilesTranscurridos);
             statusBands.push(estatusBand);
 
@@ -1124,11 +1232,11 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
               'Ultimo Requerimiento': formatDateDMY(exp.ultimoRequerimiento) || '-',
               'Dias Naturales': exp.diasNaturalesTranscurridos || '-',
               'Dias Habiles': exp.diasHabilesTranscurridos || '-',
-              Estatus: estatusBand === 'EMPTY' ? '-' : '●',
+              Estatus: estatusBand === 'EMPTY' ? '-' : 'â—',
               'Fec. Vista Cumplimiento': formatDateDMY(exp.fechaVistaCumpli) || '-',
               'Fec. Vista (Recibe Jzdo)': formatDateDMY(exp.fechaVista) || '-',
-              'Fecha Acuerdo': formatDateDMY(exp.fechaAcuerdo) || '-',
-              'Estatus Atencion': deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo),
+              'Fecha de AtenciÃ³n': formatDateDMY(exp.fechaAcuerdo) || '-',
+              'Estatus Atencion': deriveTrabajoStatus(exp),
               'Observaciones Trabajo Diario': exp.observacionesDiario || '-',
               'Capturado Por': capturadoPorNombre,
               'Fecha Captura': exp.fechaCapturaTrabajo ? new Date(exp.fechaCapturaTrabajo).toLocaleString() : '-',
@@ -1314,8 +1422,8 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
             <div className="flex items-center gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 text-xs flex-shrink-0">
               <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
               <div>
-                <p className="font-bold">Mesa de trámite no configurada</p>
-                <p className="mt-0.5">Tu cuenta de usuario no tiene asignada ninguna mesa de trámite. Pide a un Administrador que asigne una mesa a tu cuenta en la sección "Usuarios".</p>
+                <p className="font-bold">Mesa de trÃ¡mite no configurada</p>
+                <p className="mt-0.5">Tu cuenta de usuario no tiene asignada ninguna mesa de trÃ¡mite. Pide a un Administrador que asigne una mesa a tu cuenta en la secciÃ³n "Usuarios".</p>
               </div>
             </div>
           )}
@@ -1457,7 +1565,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     onClick={handleManualFlush}
                     disabled={flushing}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-700 text-white rounded-lg text-xs font-bold hover:bg-teal-800 transition-colors disabled:opacity-50 h-8"
-                    title="Ejecutar depuración e historial manualmente"
+                    title="Ejecutar depuraciÃ³n e historial manualmente"
                   >
                     {flushing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                     Enviar a Historial (Manual)
@@ -1488,7 +1596,11 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                 <Loader2 className="w-14 h-14 animate-spin text-primary" strokeWidth={2.25} />
               </div>
             ) : (
-              <div className="overflow-x-scroll overflow-y-auto relative flex-1 min-h-0">
+              <div
+                ref={tableScrollRef}
+                onScroll={handleTableScroll}
+                className="overflow-x-scroll overflow-y-auto relative flex-1 min-h-0"
+              >
                 <table className="trabajo-diario-table w-full text-xs">
                   <thead className="sticky top-0 z-50 bg-[#1e40af] text-white font-semibold">
                     <tr>
@@ -1496,36 +1608,44 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                       {renderTableHeader('juicio', 'Juicio / Expediente', 'text', 'px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('mesa', 'Mesa', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('persona', 'Persona', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('ultimoRequerimiento', 'Último Requerimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('diasNaturales', 'Días Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Naturales Transcurridos')}
-                      {renderTableHeader('diasHabiles', 'Días Hábiles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Hábiles Transcurridos')}
+                      {renderTableHeader('ultimoRequerimiento', 'Ãšltimo Requerimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('diasNaturales', 'DÃ­as Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'DÃ­as Naturales Transcurridos')}
+                      {renderTableHeader('diasHabiles', 'DÃ­as HÃ¡biles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'DÃ­as HÃ¡biles Transcurridos')}
                       {renderTableHeader('estatusCumplimiento', 'Estatus', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaVistaCumpli', 'Fec. Vista Cumplimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaVista', 'Fec. Vista (Recibe Jzdo)', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('fechaAcuerdo', 'Fecha Acuerdo', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('estatus', 'Estatus Atención', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('fechaAcuerdo', 'Fecha de AtenciÃ³n', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('estatus', 'Estatus AtenciÃ³n', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('observaciones', 'Observaciones Trabajo Diario', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('capturadoPor', 'Capturado Por', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaCaptura', 'Fecha Captura', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {can('trabajo.capture') && (
                         <th className="trabajo-diario-action-cell bg-[#1e40af] px-4 py-3 text-center text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">
-                          Acción
+                          AcciÃ³n
                         </th>
                       )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredExpedientes.map((exp, index) => {
+                    {virtualTopPadding > 0 && (
+                      <tr aria-hidden="true">
+                        <td colSpan={tableColSpan} className="p-0 border-0" style={{ height: virtualTopPadding }} />
+                      </tr>
+                    )}
+                    {virtualExpedientes.map((exp, virtualIndex) => {
+                      const index = virtualStartIndex + virtualIndex;
                       const hasWork = !!(exp.estatusAtendido || exp.fechaAcuerdo || exp.observacionesDiario);
-                      const capturadoPorNombre = users.find(u => u.IdUsuario === exp.usuarioCapturaTrabajo)?.NombreCompleto || users.find(u => u.IdUsuario === exp.usuarioCapturaTrabajo)?.Usuario || '-';
-                      const personaMesa = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.NOMBRE || '';
-                      const mesaTexto = mesas.find(m => Number(m.ID_MESA) === Number(exp.idMesa))?.MESA || '-';
+                      const usuario = usersById.get(Number(exp.usuarioCapturaTrabajo));
+                      const mesa = mesasById.get(Number(exp.idMesa));
+                      const capturadoPorNombre = usuario?.NombreCompleto || usuario?.Usuario || '-';
+                      const personaMesa = mesa?.NOMBRE || '';
+                      const mesaTexto = mesa?.MESA || '-';
                       const fechaCapturaTexto = exp.fechaCapturaTrabajo ? new Date(exp.fechaCapturaTrabajo).toLocaleString() : '-';
-                      const estatusTrabajo = deriveTrabajoStatus(exp.ultimoRequerimiento, exp.fechaAcuerdo);
+                      const estatusTrabajo = deriveTrabajoStatus(exp);
                       const rowColor = getRowColor(exp);
                       
                       return (
-                        <tr key={exp.id} className={`transition-colors hover:bg-accent/50 ${rowColor}`}>
+                        <tr key={exp.id} className={`h-12 transition-colors hover:bg-accent/50 ${rowColor}`}>
                           <td className="px-3 py-3 text-center font-semibold text-slate-700 whitespace-nowrap">{oneLineCell(String(index + 1))}</td>
                           <td className="px-3 py-3 font-bold text-black whitespace-nowrap">{oneLineCell(exp.numeroJuicio || '')}</td>
                           <td className={`px-4 py-3 text-slate-600 font-semibold whitespace-nowrap ${rowColor}`}>{oneLineCell(mesaTexto)}</td>
@@ -1588,9 +1708,14 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                         </tr>
                       );
                     })}
+                    {virtualBottomPadding > 0 && (
+                      <tr aria-hidden="true">
+                        <td colSpan={tableColSpan} className="p-0 border-0" style={{ height: virtualBottomPadding }} />
+                      </tr>
+                    )}
                     {filteredExpedientes.length === 0 && (
                       <tr>
-                        <td colSpan={can('trabajo.capture') ? 16 : 15} className="px-4 py-8 text-center text-muted-foreground">
+                        <td colSpan={tableColSpan} className="px-4 py-8 text-center text-muted-foreground">
                           No se encontraron expedientes vivos.
                         </td>
                       </tr>
@@ -1612,7 +1737,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Filtrar por número de expediente/juicio..."
+                  placeholder="Filtrar por nÃºmero de expediente/juicio..."
                   value={historySearchQuery}
                   onChange={(e) => setHistorySearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && loadHistory()}
@@ -1742,12 +1867,12 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Mesa</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Persona</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Estatus</th>
-                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Fecha Acuerdo</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Fecha de AtenciÃ³n</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Observaciones</th>
-                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Oficial / Capturó</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Oficial / CapturÃ³</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Rol</th>
                       <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Fecha Captura</th>
-                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Fecha Envío Historial</th>
+                      <th className="px-4 py-3 text-left font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Fecha EnvÃ­o Historial</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -2058,10 +2183,10 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     </div>
                     <div>
                       <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mesa</span>
-                      <span className="text-xs font-semibold text-slate-700">{mesas.find(m => Number(m.ID_MESA) === Number(selectedExpediente.idMesa))?.MESA || '-'}</span>
+                      <span className="text-xs font-semibold text-slate-700">{mesasById.get(Number(selectedExpediente.idMesa))?.MESA || '-'}</span>
                     </div>
                     <div>
-                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Último Req.</span>
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ãšltimo Req.</span>
                       <span className="text-xs font-semibold text-slate-700">{formatDateDMY(selectedExpediente.ultimoRequerimiento)}</span>
                     </div>
                   </div>
@@ -2069,7 +2194,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha Acuerdo</label>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha de AtenciÃ³n</label>
                     <input
                       type="date"
                       value={formFechaAcuerdo}
@@ -2080,7 +2205,8 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                   <div className="flex flex-col h-full">
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">Estatus Calculado</label>
                     {(() => {
-                      const currentStatus = deriveTrabajoStatus(selectedExpediente.ultimoRequerimiento, formFechaAcuerdo);
+                      const currentStatus = deriveTrabajoStatus(selectedExpediente, formFechaAcuerdo);
+                      const statusMessage = getTrabajoStatusMessage(selectedExpediente, formFechaAcuerdo);
                       const isAtendido = currentStatus === 'ATENDIDA' || currentStatus === 'ATENDIDO';
                       const isSinAtender = currentStatus === 'SIN ATENDER';
                       
@@ -2091,9 +2217,16 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                           : 'bg-slate-50 border-slate-200 text-slate-600';
 
                       return (
-                        <div className={`h-11 w-full border rounded-lg shadow-sm flex items-center justify-center transition-colors ${containerClass}`}>
-                          <span className="text-xs font-extrabold uppercase tracking-widest">{currentStatus}</span>
-                        </div>
+                        <>
+                          <div className={`h-11 w-full border rounded-lg shadow-sm flex items-center justify-center transition-colors ${containerClass}`}>
+                            <span className="text-xs font-extrabold uppercase tracking-widest">{currentStatus}</span>
+                          </div>
+                          {statusMessage && (
+                            <p className="mt-2 text-[11px] font-semibold leading-4 text-red-600 text-center">
+                              {statusMessage}
+                            </p>
+                          )}
+                        </>
                       );
                     })()}
                   </div>
@@ -2106,7 +2239,7 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                     onChange={(e) => setFormObservaciones(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-[#1e40af]/20 focus:border-[#1e40af] transition-all shadow-sm placeholder:text-slate-300"
                     style={{ height: '120px' }}
-                    placeholder="Escriba las observaciones del trabajo diario aquí..."
+                    placeholder="Escriba las observaciones del trabajo diario aquÃ­..."
                   />
                 </div>
 
