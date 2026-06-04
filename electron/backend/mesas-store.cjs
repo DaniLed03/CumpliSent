@@ -860,11 +860,7 @@ function captureTrabajoDiario({ expedienteRowid, fechaAcuerdo, observaciones, us
 
 function shouldShowInTrabajoDiario(row) {
   const cumplimiento = String(row.fechaCumplimiento || '').trim();
-  if (!cumplimiento) return true;
-
-  const fechaVista = String(row.fechaVista || '').trim();
-  const estatusAtendido = String(row.estatusAtendido || '').trim();
-  return Boolean(fechaVista) && estatusAtendido !== 'ATENDIDA';
+  return !cumplimiento;
 }
 
 function getExpedientesByMesa(mesaId) {

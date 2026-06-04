@@ -386,14 +386,6 @@ function getCumplimientosTrabajoDiario(mesaId) {
     (
       ${quoteIdentifier('FECHA DE CUMPLIMIENTO')} IS NULL
       OR TRIM(${quoteIdentifier('FECHA DE CUMPLIMIENTO')}) = ''
-      OR (
-        ${quoteIdentifier('FECHA DE VISTA')} IS NOT NULL
-        AND TRIM(${quoteIdentifier('FECHA DE VISTA')}) <> ''
-        AND (
-          ${quoteIdentifier('ESTATUS_ATENDIDO')} IS NULL
-          OR TRIM(${quoteIdentifier('ESTATUS_ATENDIDO')}) <> 'ATENDIDA'
-        )
-      )
     )
   `];
 

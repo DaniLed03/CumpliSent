@@ -66,14 +66,14 @@ const TRABAJO_SORT_COLUMNS: Array<{ key: string; label: string; type: TrabajoSor
   { key: 'juicio', label: 'JUICIO / EXPEDIENTE', type: 'text' },
   { key: 'mesa', label: 'MESA', type: 'text' },
   { key: 'persona', label: 'PERSONA', type: 'text' },
-  { key: 'ultimoRequerimiento', label: 'ULTIMO REQUERIMIENTO', type: 'date' },
-  { key: 'diasNaturales', label: 'DIAS NATURALES', type: 'number' },
-  { key: 'diasHabiles', label: 'DIAS HABILES', type: 'number' },
+  { key: 'ultimoRequerimiento', label: 'ÚLTIMO REQUERIMIENTO', type: 'date' },
+  { key: 'diasNaturales', label: 'DÍAS NATURALES', type: 'number' },
+  { key: 'diasHabiles', label: 'DÍAS HÁBILES', type: 'number' },
   { key: 'estatusCumplimiento', label: 'ESTATUS', type: 'estatus' },
   { key: 'fechaVistaCumpli', label: 'FEC. VISTA CUMPLIMIENTO', type: 'date' },
   { key: 'fechaVista', label: 'FEC. VISTA (RECIBE JZDO)', type: 'date' },
-  { key: 'fechaAcuerdo', label: 'FECHA DE ATENCIÃ“N', type: 'date' },
-  { key: 'estatus', label: 'ESTATUS ATENCION', type: 'estatus' },
+  { key: 'fechaAcuerdo', label: 'FECHA DE ATENCIÓN', type: 'date' },
+  { key: 'estatus', label: 'ESTATUS ATENCIÓN', type: 'estatus' },
   { key: 'observaciones', label: 'OBSERVACIONES TRABAJO DIARIO', type: 'text' },
   { key: 'capturadoPor', label: 'CAPTURADO POR', type: 'text' },
   { key: 'fechaCaptura', label: 'FECHA CAPTURA', type: 'date' },
@@ -1608,20 +1608,20 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
                       {renderTableHeader('juicio', 'Juicio / Expediente', 'text', 'px-3 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('mesa', 'Mesa', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('persona', 'Persona', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('ultimoRequerimiento', 'Ãšltimo Requerimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('diasNaturales', 'DÃ­as Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'DÃ­as Naturales Transcurridos')}
-                      {renderTableHeader('diasHabiles', 'DÃ­as HÃ¡biles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'DÃ­as HÃ¡biles Transcurridos')}
+                      {renderTableHeader('ultimoRequerimiento', 'Último Requerimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('diasNaturales', 'Días Naturales', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Naturales Transcurridos')}
+                      {renderTableHeader('diasHabiles', 'Días Hábiles', 'number', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap', 'Días Hábiles Transcurridos')}
                       {renderTableHeader('estatusCumplimiento', 'Estatus', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaVistaCumpli', 'Fec. Vista Cumplimiento', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaVista', 'Fec. Vista (Recibe Jzdo)', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('fechaAcuerdo', 'Fecha de AtenciÃ³n', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
-                      {renderTableHeader('estatus', 'Estatus AtenciÃ³n', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('fechaAcuerdo', 'Fecha de Atención', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
+                      {renderTableHeader('estatus', 'Estatus Atención', 'estatus', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('observaciones', 'Observaciones Trabajo Diario', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('capturadoPor', 'Capturado Por', 'text', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {renderTableHeader('fechaCaptura', 'Fecha Captura', 'date', 'px-4 py-3 text-left text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap')}
                       {can('trabajo.capture') && (
                         <th className="trabajo-diario-action-cell bg-[#1e40af] px-4 py-3 text-center text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap">
-                          AcciÃ³n
+                          Acción
                         </th>
                       )}
                     </tr>
