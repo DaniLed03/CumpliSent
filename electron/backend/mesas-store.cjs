@@ -82,9 +82,33 @@ function initializeMesasTables() {
     );
   `);
 
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS "INGRESOS_EXPEDIENTES" (
+      "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+      "FECHA_INGRESO" TEXT DEFAULT '',
+      "NUMERO_JUICIO" TEXT NOT NULL,
+      "SENTENCIA" TEXT DEFAULT '',
+      "FECHA_EJECUTORIA_JUZGADO" TEXT DEFAULT '',
+      "FECHA_EJECUTORIA_COLEGIADO" TEXT DEFAULT '',
+      "FECHA_EJECUTORIA_INCONFORMIDAD" TEXT DEFAULT '',
+      "PERSONA_CAPTURA" TEXT DEFAULT '',
+      "CREATED_AT" TEXT DEFAULT '',
+      "UPDATED_AT" TEXT DEFAULT ''
+    );
+  `);
+
   ensureTableColumn(database, 'HISTORIAL_ASIGNACION_MESAS', 'EXPEDIENTE_ROWID', 'INTEGER');
   ensureTableColumn(database, 'HISTORIAL_TRABAJO_DIARIO', 'EXPEDIENTE_ROWID', 'INTEGER');
   ensureTableColumn(database, 'HISTORIAL_TRABAJO_DIARIO', 'PERSONA_MESA', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'FECHA_INGRESO', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'NUMERO_JUICIO', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'SENTENCIA', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'FECHA_EJECUTORIA_JUZGADO', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'FECHA_EJECUTORIA_COLEGIADO', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'FECHA_EJECUTORIA_INCONFORMIDAD', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'PERSONA_CAPTURA', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'CREATED_AT', 'TEXT DEFAULT \'\'');
+  ensureTableColumn(database, 'INGRESOS_EXPEDIENTES', 'UPDATED_AT', 'TEXT DEFAULT \'\'');
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS "IDX_HISTORIAL_ASIGNACION_MESAS_ID"
@@ -94,6 +118,11 @@ function initializeMesasTables() {
   database.exec(`
     CREATE INDEX IF NOT EXISTS "IDX_HISTORIAL_ASIGNACION_MESAS_EXPEDIENTE"
     ON "HISTORIAL_ASIGNACION_MESAS" ("EXPEDIENTE");
+  `);
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS "IDX_INGRESOS_EXPEDIENTES_JUICIO"
+    ON "INGRESOS_EXPEDIENTES" ("NUMERO_JUICIO");
   `);
 }
 
@@ -873,6 +902,299 @@ function getExpedientesAllMesas() {
   return getCumplimientosTrabajoDiario().filter(shouldShowInTrabajoDiario);
 }
 
+/* ----------------------------------------------------------------------------
+ * Ingresos de expedientes
+ * ------------------------------------------------------------------------- */
+
+function normalizeText(value) {
+  return String(value ?? '').trim();
+}
+
+function normalizeLookupText(value) {
+  return normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
+function normalizeIngresoPayload(data = {}) {
+  const { toIsoDate } = require('./cumplimientos.cjs');
+  return {
+    fechaIngreso: toIsoDate(data.fechaIngreso || data.FECHA_INGRESO || data['Fecha de ingreso'] || ''),
+    numeroJuicio: normalizeText(data.numeroJuicio || data.NUMERO_JUICIO || data['Número de juicio'] || data['Numero de juicio']),
+    sentencia: toIsoDate(data.sentencia || data.SENTENCIA || data.Sentencia || ''),
+    fechaEjecutoriaJuzgado: toIsoDate(data.fechaEjecutoriaJuzgado || data.FECHA_EJECUTORIA_JUZGADO || data['Fecha ejecutoria juzgado'] || ''),
+    fechaEjecutoriaColegiado: toIsoDate(data.fechaEjecutoriaColegiado || data.FECHA_EJECUTORIA_COLEGIADO || data['Fecha ejecutoria colegiado'] || ''),
+    fechaEjecutoriaInconformidad: toIsoDate(data.fechaEjecutoriaInconformidad || data.FECHA_EJECUTORIA_INCONFORMIDAD || data['Fecha ejecutoria inconformidad'] || ''),
+    personaCaptura: normalizeText(data.personaCaptura || data.PERSONA_CAPTURA || data['Persona captura'] || '').toUpperCase(),
+  };
+}
+
+function ingresoFromDb(row) {
+  return {
+    id: row.ID,
+    fechaIngreso: row.FECHA_INGRESO || '',
+    numeroJuicio: row.NUMERO_JUICIO || '',
+    sentencia: row.SENTENCIA || '',
+    fechaEjecutoriaJuzgado: row.FECHA_EJECUTORIA_JUZGADO || '',
+    fechaEjecutoriaColegiado: row.FECHA_EJECUTORIA_COLEGIADO || '',
+    fechaEjecutoriaInconformidad: row.FECHA_EJECUTORIA_INCONFORMIDAD || '',
+    personaCaptura: row.PERSONA_CAPTURA || '',
+    createdAt: row.CREATED_AT || '',
+    updatedAt: row.UPDATED_AT || '',
+  };
+}
+
+function listIngresosExpedientes() {
+  return getDb()
+    .prepare(`
+      SELECT * FROM "INGRESOS_EXPEDIENTES"
+      ORDER BY "FECHA_INGRESO" DESC, "ID" DESC
+    `)
+    .all()
+    .map(ingresoFromDb);
+}
+
+function createIngresoExpediente(data) {
+  const database = getDb();
+  const item = normalizeIngresoPayload(data);
+  if (!item.numeroJuicio) return { ok: false, error: 'El número de juicio es obligatorio.' };
+
+  const now = new Date().toISOString();
+  const result = database.prepare(`
+    INSERT INTO "INGRESOS_EXPEDIENTES" (
+      "FECHA_INGRESO",
+      "NUMERO_JUICIO",
+      "SENTENCIA",
+      "FECHA_EJECUTORIA_JUZGADO",
+      "FECHA_EJECUTORIA_COLEGIADO",
+      "FECHA_EJECUTORIA_INCONFORMIDAD",
+      "PERSONA_CAPTURA",
+      "CREATED_AT",
+      "UPDATED_AT"
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    item.fechaIngreso,
+    item.numeroJuicio,
+    item.sentencia,
+    item.fechaEjecutoriaJuzgado,
+    item.fechaEjecutoriaColegiado,
+    item.fechaEjecutoriaInconformidad,
+    item.personaCaptura,
+    now,
+    now,
+  );
+
+  return { ok: true, id: result.lastInsertRowid };
+}
+
+function updateIngresoExpediente(id, data) {
+  const item = normalizeIngresoPayload(data);
+  if (!item.numeroJuicio) return { ok: false, error: 'El número de juicio es obligatorio.' };
+
+  const result = getDb().prepare(`
+    UPDATE "INGRESOS_EXPEDIENTES"
+    SET "FECHA_INGRESO" = ?,
+        "NUMERO_JUICIO" = ?,
+        "SENTENCIA" = ?,
+        "FECHA_EJECUTORIA_JUZGADO" = ?,
+        "FECHA_EJECUTORIA_COLEGIADO" = ?,
+        "FECHA_EJECUTORIA_INCONFORMIDAD" = ?,
+        "PERSONA_CAPTURA" = ?,
+        "UPDATED_AT" = ?
+    WHERE "ID" = ?
+  `).run(
+    item.fechaIngreso,
+    item.numeroJuicio,
+    item.sentencia,
+    item.fechaEjecutoriaJuzgado,
+    item.fechaEjecutoriaColegiado,
+    item.fechaEjecutoriaInconformidad,
+    item.personaCaptura,
+    new Date().toISOString(),
+    Number(id),
+  );
+
+  return result.changes > 0 ? { ok: true } : { ok: false, error: 'Registro no encontrado.' };
+}
+
+function deleteIngresoExpediente(id) {
+  const result = getDb()
+    .prepare('DELETE FROM "INGRESOS_EXPEDIENTES" WHERE "ID" = ?')
+    .run(Number(id));
+  return result.changes > 0 ? { ok: true } : { ok: false, error: 'Registro no encontrado.' };
+}
+
+function importIngresosExpedientes(rows = []) {
+  const database = getDb();
+  const insert = database.prepare(`
+    INSERT INTO "INGRESOS_EXPEDIENTES" (
+      "FECHA_INGRESO",
+      "NUMERO_JUICIO",
+      "SENTENCIA",
+      "FECHA_EJECUTORIA_JUZGADO",
+      "FECHA_EJECUTORIA_COLEGIADO",
+      "FECHA_EJECUTORIA_INCONFORMIDAD",
+      "PERSONA_CAPTURA",
+      "CREATED_AT",
+      "UPDATED_AT"
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const errors = [];
+  let imported = 0;
+
+  database.exec('BEGIN');
+  try {
+    rows.forEach((row, index) => {
+      const item = normalizeIngresoPayload(row);
+      if (!item.numeroJuicio) {
+        errors.push({ row: index + 2, error: 'Número de juicio vacío.' });
+        return;
+      }
+      const now = new Date().toISOString();
+      insert.run(
+        item.fechaIngreso,
+        item.numeroJuicio,
+        item.sentencia,
+        item.fechaEjecutoriaJuzgado,
+        item.fechaEjecutoriaColegiado,
+        item.fechaEjecutoriaInconformidad,
+        item.personaCaptura,
+        now,
+        now,
+      );
+      imported += 1;
+    });
+    database.exec('COMMIT');
+  } catch (err) {
+    database.exec('ROLLBACK');
+    throw err;
+  }
+
+  return { ok: true, imported, errors };
+}
+
+function getIngresoExecutionDates(item) {
+  return [
+    item.fechaEjecutoriaJuzgado,
+    item.fechaEjecutoriaColegiado,
+    item.fechaEjecutoriaInconformidad,
+  ].filter(Boolean);
+}
+
+function getSiseExecutionDates(row) {
+  return [
+    row.fechaEjecutoria,
+    row.fechaEjecutoriaColegiado,
+    row.fechaEjecutoriaInconformidad,
+  ].filter(Boolean);
+}
+
+function compareIngresosExpedientes() {
+  const ingresos = listIngresosExpedientes();
+  const { getCumplimientos } = require('./store.cjs');
+  const cumplimientos = getCumplimientos();
+  const ingresosByJuicio = new Map();
+  const siseByJuicio = new Map();
+
+  ingresos.forEach((item) => {
+    const key = normalizeLookupText(item.numeroJuicio);
+    if (!key) return;
+    if (!ingresosByJuicio.has(key)) ingresosByJuicio.set(key, []);
+    ingresosByJuicio.get(key).push(item);
+  });
+
+  cumplimientos.forEach((row) => {
+    const key = normalizeLookupText(row.numeroJuicio);
+    if (!key) return;
+    if (!siseByJuicio.has(key)) siseByJuicio.set(key, []);
+    siseByJuicio.get(key).push(row);
+  });
+
+  const issues = [];
+
+  ingresos.forEach((ingreso) => {
+    const key = normalizeLookupText(ingreso.numeroJuicio);
+    const matches = siseByJuicio.get(key) || [];
+    const ingresoDates = getIngresoExecutionDates(ingreso);
+
+    if (!ingreso.personaCaptura) {
+      issues.push({
+        type: 'SIN_PERSONA_CAPTURA',
+        severity: 'warning',
+        numeroJuicio: ingreso.numeroJuicio,
+        ingreso,
+        sise: null,
+        detail: 'No tiene identificada a la persona que realizó la captura.',
+      });
+    }
+
+    if (matches.length === 0) {
+      issues.push({
+        type: 'INGRESO_NO_EXISTE_EN_SISE',
+        severity: 'error',
+        numeroJuicio: ingreso.numeroJuicio,
+        ingreso,
+        sise: null,
+        detail: 'Ingresó al área de cumplimientos, pero no aparece en la información del SISE.',
+      });
+      return;
+    }
+
+    const hasEquivalentDate = matches.some((row) => {
+      const siseDates = getSiseExecutionDates(row);
+      return ingresoDates.some((date) => siseDates.includes(date));
+    });
+    const siseHasAnyExecutionDate = matches.some((row) => getSiseExecutionDates(row).length > 0);
+
+    if (ingresoDates.length > 0 && !siseHasAnyExecutionDate) {
+      issues.push({
+        type: 'SIN_FECHA_EQUIVALENTE_SISE',
+        severity: 'warning',
+        numeroJuicio: ingreso.numeroJuicio,
+        ingreso,
+        sise: matches[0],
+        detail: 'Tiene fecha de ejecutoria interna, pero no cuenta con fecha equivalente en SISE.',
+      });
+    } else if (ingresoDates.length > 0 && !hasEquivalentDate) {
+      issues.push({
+        type: 'DIFERENCIA_FECHA_EJECUTORIA',
+        severity: 'warning',
+        numeroJuicio: ingreso.numeroJuicio,
+        ingreso,
+        sise: matches[0],
+        detail: 'Presenta diferencias entre la fecha de ejecutoria interna y la fecha capturada en SISE.',
+      });
+    }
+  });
+
+  cumplimientos.forEach((row) => {
+    const key = normalizeLookupText(row.numeroJuicio);
+    if (!key || ingresosByJuicio.has(key)) return;
+    if (getSiseExecutionDates(row).length === 0) return;
+
+    issues.push({
+      type: 'SISE_NO_TURNADO_CUMPLIMIENTOS',
+      severity: 'error',
+      numeroJuicio: row.numeroJuicio,
+      ingreso: null,
+      sise: row,
+      detail: 'Causó ejecutoria en SISE, pero no ha sido turnado o registrado en el área de cumplimientos.',
+    });
+  });
+
+  return {
+    ok: true,
+    issues,
+    totals: {
+      ingresos: ingresos.length,
+      sise: cumplimientos.length,
+      incidencias: issues.length,
+    },
+  };
+}
+
 function getHistorialTrabajoDiario(filters = {}) {
   const database = getDb();
   
@@ -1161,6 +1483,12 @@ module.exports = {
   captureTrabajoDiario,
   getExpedientesByMesa,
   getExpedientesAllMesas,
+  listIngresosExpedientes,
+  createIngresoExpediente,
+  updateIngresoExpediente,
+  deleteIngresoExpediente,
+  importIngresosExpedientes,
+  compareIngresosExpedientes,
   getHistorialTrabajoDiario,
   flushTrabajoDiarioToHistory
 };

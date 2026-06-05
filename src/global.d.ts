@@ -171,6 +171,12 @@ declare global {
       getHistorialTrabajoDiario: (filters: any) => Promise<any>;
       captureTrabajoDiario: (data: any) => Promise<any>;
       flushTrabajoDiarioToHistory: () => Promise<any>;
+      listIngresosExpedientes: () => Promise<any[]>;
+      createIngresoExpediente: (data: any) => Promise<any>;
+      updateIngresoExpediente: (id: any, data: any) => Promise<any>;
+      deleteIngresoExpediente: (id: any) => Promise<any>;
+      importIngresosExpedientes: (rows: any[]) => Promise<any>;
+      compareIngresosExpedientes: () => Promise<any>;
     };
   }
 

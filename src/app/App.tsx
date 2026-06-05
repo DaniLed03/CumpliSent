@@ -19,6 +19,7 @@ import {
   X,
   Clock,
   ClipboardList,
+  FileSpreadsheet,
   TableProperties,
   Trash2
 } from "lucide-react";
@@ -29,6 +30,7 @@ import UserManagement from "./components/UserManagement";
 import RolePermissions from "./components/RolePermissions";
 import MesasTramite from "./components/MesasTramite";
 import TrabajoDiario from "./components/TrabajoDiario";
+import IngresosExpedientes from "./components/IngresosExpedientes";
 import { confirmAlert, showStyledAlert } from "./utils/alert";
 import { toastError, toastSuccess, toastWarning } from "./utils/toast";
 
@@ -45,7 +47,8 @@ type ViewKey =
   | "usuarios"
   | "roles"
   | "mesas"
-  | "trabajo-diario";
+  | "trabajo-diario"
+  | "ingresos-expedientes";
 
 const VIEW_TITLES: Record<ViewKey, string> = {
   cumplimientos: "Cumplimientos",
@@ -56,6 +59,7 @@ const VIEW_TITLES: Record<ViewKey, string> = {
   roles: "Roles y permisos",
   mesas: "Mesas de trámite",
   "trabajo-diario": "Trabajo diario",
+  "ingresos-expedientes": "Ingresos de expedientes",
 };
 
 const VIEW_PERMISSIONS: Record<ViewKey, string> = {
@@ -67,6 +71,7 @@ const VIEW_PERMISSIONS: Record<ViewKey, string> = {
   roles: "view.roles",
   mesas: "view.mesas",
   "trabajo-diario": "view.trabajo_diario",
+  "ingresos-expedientes": "view.ingresos_expedientes",
 };
 
 function getBackend() {
@@ -1123,6 +1128,7 @@ export default function App() {
     { view: "dias-inhabiles", icon: <Calendar className="w-4 h-4" /> },
     { view: "mesas", icon: <TableProperties className="w-4 h-4" /> },
     { view: "trabajo-diario", icon: <ClipboardList className="w-4 h-4" /> },
+    { view: "ingresos-expedientes", icon: <FileSpreadsheet className="w-4 h-4" /> },
   ];
   const adminNavItems: Array<{ view: ViewKey; icon: React.ReactNode }> = [
     { view: "servidor", icon: <Server className="w-4 h-4" /> },
@@ -1160,7 +1166,7 @@ export default function App() {
               <h1 className="text-xl font-black tracking-normal whitespace-nowrap">
                 <span className="text-[#0c2340]">Cumpli</span>
                 <span className="text-[#0066ff]">Sent</span>
-                <span className="ml-1 text-black">v9.6</span>
+                <span className="ml-1 text-black">v10.1</span>
               </h1>
             </div>
           )}
@@ -1328,6 +1334,9 @@ export default function App() {
           )}
           {currentView === "trabajo-diario" && (
             <TrabajoDiario permissions={permissions} isAdmin={isAdmin} session={session} />
+          )}
+          {currentView === "ingresos-expedientes" && (
+            <IngresosExpedientes permissions={permissions} isAdmin={isAdmin} session={session} />
           )}
         </section>
       </main>

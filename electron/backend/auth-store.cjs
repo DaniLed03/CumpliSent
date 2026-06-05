@@ -52,6 +52,7 @@ const SYSTEM_PERMISSIONS = [
   { IdPermiso: 'view.roles', NombrePermiso: 'Roles y permisos', Categoria: 'VISTAS' },
   { IdPermiso: 'view.mesas', NombrePermiso: 'Mesas de tramite', Categoria: 'VISTAS' },
   { IdPermiso: 'view.trabajo_diario', NombrePermiso: 'Trabajo diario', Categoria: 'VISTAS' },
+  { IdPermiso: 'view.ingresos_expedientes', NombrePermiso: 'Ingresos de expedientes', Categoria: 'VISTAS' },
 
   { IdPermiso: 'cumplimientos.details', NombrePermiso: 'Ver detalles', Categoria: 'CUMPLIMIENTOS' },
   { IdPermiso: 'cumplimientos.delete', NombrePermiso: 'Borrar', Categoria: 'CUMPLIMIENTOS' },
@@ -78,6 +79,12 @@ const SYSTEM_PERMISSIONS = [
   { IdPermiso: 'trabajo.edit_today', NombrePermiso: 'Editar', Categoria: 'TRABAJO DIARIO' },
   { IdPermiso: 'trabajo.flush_history', NombrePermiso: 'Enviar a Historial', Categoria: 'TRABAJO DIARIO' },
   { IdPermiso: 'trabajo.history', NombrePermiso: 'Mostrar Historial', Categoria: 'TRABAJO DIARIO' },
+
+  { IdPermiso: 'ingresos.create', NombrePermiso: 'Capturar', Categoria: 'INGRESOS DE EXPEDIENTES' },
+  { IdPermiso: 'ingresos.edit', NombrePermiso: 'Editar', Categoria: 'INGRESOS DE EXPEDIENTES' },
+  { IdPermiso: 'ingresos.delete', NombrePermiso: 'Borrar', Categoria: 'INGRESOS DE EXPEDIENTES' },
+  { IdPermiso: 'ingresos.import', NombrePermiso: 'Importar Excel', Categoria: 'INGRESOS DE EXPEDIENTES' },
+  { IdPermiso: 'ingresos.compare', NombrePermiso: 'Comparar contra SISE', Categoria: 'INGRESOS DE EXPEDIENTES' },
 
   { IdPermiso: 'users.create', NombrePermiso: 'Agregar', Categoria: 'USUARIOS' },
   { IdPermiso: 'users.edit', NombrePermiso: 'Editar', Categoria: 'USUARIOS' },
@@ -106,6 +113,12 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'dias_inhabiles.delete',
     'view.mesas',
     'view.trabajo_diario',
+    'view.ingresos_expedientes',
+    'ingresos.create',
+    'ingresos.edit',
+    'ingresos.delete',
+    'ingresos.import',
+    'ingresos.compare',
     'trabajo.history',
   ],
   3: [
@@ -119,6 +132,11 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'cumplimientos.update_from_sentencias',
     'view.mesas',
     'view.trabajo_diario',
+    'view.ingresos_expedientes',
+    'ingresos.create',
+    'ingresos.edit',
+    'ingresos.import',
+    'ingresos.compare',
     'trabajo.history',
   ],
   4: [
@@ -128,6 +146,10 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'cumplimientos.export',
     'view.mesas',
     'view.trabajo_diario',
+    'view.ingresos_expedientes',
+    'ingresos.create',
+    'ingresos.edit',
+    'ingresos.compare',
     'trabajo.capture',
     'trabajo.edit_today',
     'trabajo.history',
@@ -633,8 +655,9 @@ function listPermissions() {
         WHEN 'DIAS INHABILES' THEN 3
         WHEN 'MESAS DE TRAMITE' THEN 4
         WHEN 'TRABAJO DIARIO' THEN 5
-        WHEN 'USUARIOS' THEN 6
-        WHEN 'ROLES Y PERMISOS' THEN 7
+        WHEN 'INGRESOS DE EXPEDIENTES' THEN 6
+        WHEN 'USUARIOS' THEN 7
+        WHEN 'ROLES Y PERMISOS' THEN 8
         ELSE 99
       END,
       CASE "IdPermiso"
@@ -646,6 +669,7 @@ function listPermissions() {
         WHEN 'view.roles' THEN 6
         WHEN 'view.mesas' THEN 7
         WHEN 'view.trabajo_diario' THEN 8
+        WHEN 'view.ingresos_expedientes' THEN 9
         WHEN 'cumplimientos.details' THEN 10
         WHEN 'cumplimientos.delete' THEN 11
         WHEN 'cumplimientos.edit' THEN 12
@@ -668,6 +692,11 @@ function listPermissions() {
         WHEN 'trabajo.edit_today' THEN 41
         WHEN 'trabajo.flush_history' THEN 42
         WHEN 'trabajo.history' THEN 43
+        WHEN 'ingresos.create' THEN 50
+        WHEN 'ingresos.edit' THEN 51
+        WHEN 'ingresos.delete' THEN 52
+        WHEN 'ingresos.import' THEN 53
+        WHEN 'ingresos.compare' THEN 54
         WHEN 'users.create' THEN 70
         WHEN 'users.edit' THEN 71
         WHEN 'users.delete' THEN 72

@@ -14,6 +14,12 @@ const {
   captureTrabajoDiario,
   getExpedientesByMesa,
   getExpedientesAllMesas,
+  listIngresosExpedientes,
+  createIngresoExpediente,
+  updateIngresoExpediente,
+  deleteIngresoExpediente,
+  importIngresosExpedientes,
+  compareIngresosExpedientes,
   getHistorialTrabajoDiario,
   flushTrabajoDiarioToHistory
 } = require('./mesas-store.cjs');
@@ -41,6 +47,13 @@ function registerMesasHandlers() {
   ipcMain.handle('trabajo:expedientes-all', () => getExpedientesAllMesas());
   ipcMain.handle('trabajo:history', (_event, filters) => getHistorialTrabajoDiario(filters));
   ipcMain.handle('trabajo:flush', () => flushTrabajoDiarioToHistory());
+
+  ipcMain.handle('ingresos:list', () => listIngresosExpedientes());
+  ipcMain.handle('ingresos:create', (_event, data) => createIngresoExpediente(data));
+  ipcMain.handle('ingresos:update', (_event, id, data) => updateIngresoExpediente(id, data));
+  ipcMain.handle('ingresos:delete', (_event, id) => deleteIngresoExpediente(id));
+  ipcMain.handle('ingresos:import', (_event, rows) => importIngresosExpedientes(rows));
+  ipcMain.handle('ingresos:compare', () => compareIngresosExpedientes());
 
   registered = true;
 }

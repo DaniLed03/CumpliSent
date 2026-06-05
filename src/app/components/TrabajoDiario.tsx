@@ -1403,15 +1403,6 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
             Historial de Capturas
           </button>
         )}
-        <button
-          onClick={handleExportExcel}
-          disabled={(activeTab === 'vivos' && loading) || (activeTab === 'historial' && loadingHistory)}
-          className="ml-auto mr-4 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-600 px-3 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          title="Exportar Excel"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Exportar Excel
-        </button>
       </div>
 
       {/* Tab: Vivos */}
@@ -1560,15 +1551,29 @@ export default function TrabajoDiario({ permissions, isAdmin, session }: Trabajo
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportExcel}
+                  disabled={loading}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-600 px-3 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Exportar Excel"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  EXPORTAR EXCEL
+                </button>
                 {can('trabajo.flush_history') && (
                   <button
                     onClick={handleManualFlush}
                     disabled={flushing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-700 text-white rounded-lg text-xs font-bold hover:bg-teal-800 transition-colors disabled:opacity-50 h-8"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 h-8"
+                    style={{
+                      backgroundColor: '#4338ca',
+                      border: '1px solid #3730a3',
+                      boxShadow: '0 2px 6px rgba(67, 56, 202, 0.24)',
+                    }}
                     title="Ejecutar depuraciÃ³n e historial manualmente"
                   >
                     {flushing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    Enviar a Historial (Manual)
+                    ENVIAR A HISTORIAL (MANUAL)
                   </button>
                 )}
                 <button

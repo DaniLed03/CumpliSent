@@ -541,7 +541,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                     ) : (
                       <>
                         <Upload className="w-4 h-4 text-white" />
-                        Importar Excel
+                        IMPORTAR EXCEL
                       </>
                     )}
                     <input
@@ -572,7 +572,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                     ) : (
                       <>
                         <Shuffle className="w-4 h-4 text-white" />
-                        Ejecutar Asignación Automática
+                        EJECUTAR ASIGNACIÓN AUTOMÁTICA
                       </>
                     )}
                   </button>
@@ -588,7 +588,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                     }}
                   >
                     <Edit className="w-4 h-4 text-white" />
-                    Reasignar
+                    REASIGNAR
                   </button>
                 )}
                 {can('mesas.create') && (
@@ -597,7 +597,7 @@ export default function MesasTramite({ permissions, isAdmin, session }: MesasTra
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Nueva Mesa
+                    NUEVA MESA
                   </button>
                 )}
               </div>

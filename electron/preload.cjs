@@ -348,4 +348,24 @@ contextBridge.exposeInMainWorld('api', {
   flushTrabajoDiarioToHistory: async () => remoteSession
     ? await remoteRequest('/api/trabajo/flush', { method: 'POST' })
     : ipcRenderer.invoke('trabajo:flush'),
+
+  // Ingresos de expedientes
+  listIngresosExpedientes: async () => remoteSession
+    ? (await remoteRequest('/api/ingresos-expedientes')).rows
+    : ipcRenderer.invoke('ingresos:list'),
+  createIngresoExpediente: async (data) => remoteSession
+    ? await remoteRequest('/api/ingresos-expedientes', { method: 'POST', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('ingresos:create', data),
+  updateIngresoExpediente: async (id, data) => remoteSession
+    ? await remoteRequest(`/api/ingresos-expedientes/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) })
+    : ipcRenderer.invoke('ingresos:update', id, data),
+  deleteIngresoExpediente: async (id) => remoteSession
+    ? await remoteRequest(`/api/ingresos-expedientes/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    : ipcRenderer.invoke('ingresos:delete', id),
+  importIngresosExpedientes: async (rows) => remoteSession
+    ? await remoteRequest('/api/ingresos-expedientes/import', { method: 'POST', body: JSON.stringify(rows) })
+    : ipcRenderer.invoke('ingresos:import', rows),
+  compareIngresosExpedientes: async () => remoteSession
+    ? await remoteRequest('/api/ingresos-expedientes/compare')
+    : ipcRenderer.invoke('ingresos:compare'),
 });

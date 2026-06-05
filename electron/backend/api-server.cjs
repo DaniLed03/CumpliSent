@@ -45,6 +45,12 @@ const {
   captureTrabajoDiario,
   getExpedientesByMesa,
   getExpedientesAllMesas,
+  listIngresosExpedientes,
+  createIngresoExpediente,
+  updateIngresoExpediente,
+  deleteIngresoExpediente,
+  importIngresosExpedientes,
+  compareIngresosExpedientes,
   getHistorialTrabajoDiario,
   flushTrabajoDiarioToHistory
 } = require('./mesas-store.cjs');
@@ -532,6 +538,43 @@ function buildApp() {
     preHandler: [app.authenticate, app.requirePermission('trabajo.flush_history')],
   }, async () => {
     return flushTrabajoDiarioToHistory();
+  });
+
+  // Ingresos de expedientes
+  app.get('/api/ingresos-expedientes', {
+    preHandler: [app.authenticate, app.requirePermission('view.ingresos_expedientes')],
+  }, async () => {
+    return { ok: true, rows: listIngresosExpedientes() };
+  });
+
+  app.post('/api/ingresos-expedientes', {
+    preHandler: [app.authenticate, app.requirePermission('ingresos.create')],
+  }, async (request) => {
+    return createIngresoExpediente(request.body || {});
+  });
+
+  app.put('/api/ingresos-expedientes/:id', {
+    preHandler: [app.authenticate, app.requirePermission('ingresos.edit')],
+  }, async (request) => {
+    return updateIngresoExpediente(request.params.id, request.body || {});
+  });
+
+  app.delete('/api/ingresos-expedientes/:id', {
+    preHandler: [app.authenticate, app.requirePermission('ingresos.delete')],
+  }, async (request) => {
+    return deleteIngresoExpediente(request.params.id);
+  });
+
+  app.post('/api/ingresos-expedientes/import', {
+    preHandler: [app.authenticate, app.requirePermission('ingresos.import')],
+  }, async (request) => {
+    return importIngresosExpedientes(Array.isArray(request.body) ? request.body : []);
+  });
+
+  app.get('/api/ingresos-expedientes/compare', {
+    preHandler: [app.authenticate, app.requirePermission('ingresos.compare')],
+  }, async () => {
+    return compareIngresosExpedientes();
   });
 
   return app;
